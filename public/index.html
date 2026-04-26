@@ -14,13 +14,6 @@ body {
   display: flex;
 }
 
-.sidebar {
-  width: 240px;
-  background: #11131a;
-  padding: 15px;
-  border-right: 1px solid #222;
-}
-
 .main {
   flex: 1;
   display: flex;
@@ -87,32 +80,31 @@ button {
 
 <body>
 
-<div class="sidebar">
-  <h2>☄️ Comet</h2>
-  <p style="color:#aaa;">AI Assistant</p>
-</div>
-
 <div class="main">
 
   <div id="chat" class="chat"></div>
 
   <div class="inputBar">
-    <textarea id="input" placeholder="Ask Comet..."></textarea>
+    <textarea id="input" placeholder="Message Comet..."></textarea>
     <button onclick="send()">Send</button>
   </div>
 
 </div>
 
 <script>
+const WORKER_URL = "YOUR_WORKER_URL_HERE";
+
 async function send() {
   const input = document.getElementById("input");
   const text = input.value;
 
   if (!text.trim()) return;
 
-  add("user", text);
+  addMessage("user", text);
 
-  const res = await fetch("/", {
+  input.value = "";
+
+  const res = await fetch(WORKER_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -122,12 +114,10 @@ async function send() {
 
   const data = await res.json();
 
-  add("ai", data.reply);
-
-  input.value = "";
+  addMessage("ai", data.reply || "No response");
 }
 
-function add(role, text) {
+function addMessage(role, text) {
   const chat = document.getElementById("chat");
 
   const div = document.createElement("div");
