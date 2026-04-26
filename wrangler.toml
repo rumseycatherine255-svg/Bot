@@ -1,0 +1,24 @@
+name = "comet"
+main = "src/worker.js"
+compatibility_date = "2024-01-01"
+
+# Your comethosting.uk domain
+routes = [
+  { pattern = "comethosting.uk/*", zone_name = "comethosting.uk" },
+  { pattern = "www.comethosting.uk/*", zone_name = "comethosting.uk" }
+]
+
+# KV Namespace for storing users, deployments, DNS records
+# Run: npx wrangler kv:namespace create COMET_KV
+# Then paste the id below
+[[kv_namespaces]]
+binding = "COMET_KV"
+id = "REPLACE_WITH_YOUR_KV_ID"
+
+[vars]
+GITHUB_CLIENT_ID = "REPLACE_WITH_YOUR_GITHUB_CLIENT_ID"
+BASE_URL = "https://comethosting.uk"
+
+# Secrets — set these via: npx wrangler secret put SECRET_NAME
+# GITHUB_CLIENT_SECRET
+# SESSION_SECRET
