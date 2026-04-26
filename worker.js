@@ -1,12 +1,22 @@
 export default {
   async fetch(request, env) {
 
-    if (request.method !== "POST") {
-      return new Response("☄️ Comet API running");
+    console.log("🔥 HIT WORKER:", request.method);
+
+    // Always respond to GET so we KNOW it's alive
+    if (request.method === "GET") {
+      return new Response("☄️ Comet Worker Alive");
     }
 
     try {
-      const { message } = await request.json();
+      const body = await request.json();
+      console.log("📩 BODY:", body);
+
+      if (!body.message) {
+        return new Response(JSON.stringify({
+          error: "No message received"
+        }));
+      }
 
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -19,14 +29,14 @@ export default {
           model: "claude-3-5-sonnet-20241022",
           max_tokens: 500,
           messages: [
-            { role: "user", content: message }
+            { role: "user", content: body.message }
           ]
         })
       });
 
       const data = await res.json();
 
-      console.log("DEBUG:", data);
+      console.log("🤖 CLAUDE RESPONSE:", data);
 
       return new Response(JSON.stringify({
         reply: data.content?.[0]?.text || JSON.stringify(data)
@@ -35,8 +45,10 @@ export default {
       });
 
     } catch (err) {
+      console.log("❌ ERROR:", err);
+
       return new Response(JSON.stringify({
-        reply: "ERROR: " + err.message
+        error: err.message
       }), {
         headers: { "Content-Type": "application/json" }
       });
