@@ -1,12 +1,14 @@
 {
-  "name": "comet",
+  "name": "comet-ai",
   "version": "1.0.0",
-  "description": "Comet hosting platform — Cloudflare Worker",
+  "type": "module",
+  "main": "worker.js",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "start": "wrangler deploy"
   },
-  "devDependencies": {
-    "wrangler": "^3.0.0"
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5"
   }
 }
