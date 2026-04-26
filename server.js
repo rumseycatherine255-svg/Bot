@@ -2,175 +2,169 @@ const express = require("express");
 const session = require("express-session");
 const path = require("path");
 const fs = require("fs");
-const { execSync, exec } = require("child_process");
 
 const app = express();
-
 const PORT = process.env.PORT || 3000;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID;
 const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET;
-const SESSION_SECRET = process.env.SESSION_SECRET || "dev-secret";
+const SESSION_SECRET = process.env.SESSION_SECRET || "change-me";
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(session({
-  secret: SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false
-}));
+if (!GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET) {
+  console.warn("⚠️ Missing GitHub OAuth env vars");
+}
 
-app.use(express.static(path.join(__dirname, "public")));
+// ───── DATA ─────
+const DATA_FILE = path.join(__dirname, "data.json");
 
-const DATA_FILE = "./data.json";
-const sites = {};
-let nextPort = 4000;
-
-/* DATA */
 function loadData() {
   if (!fs.existsSync(DATA_FILE)) return { users: {} };
-  return JSON.parse(fs.readFileSync(DATA_FILE));
+  return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
 }
+
 function saveData(d) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(d, null, 2));
 }
-function ts() { return new Date().toISOString(); }
 
+// ───── APP ─────
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+app.use(
+  session({
+    secret: SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+  })
+);
+
+app.use(express.static(path.join(__dirname, "public")));
+
+// ───── AUTH GUARD ─────
 function requireAuth(req, res, next) {
-  if (!req.session.user) return res.redirect("/");
+  if (!req.session.user) {
+    return res.redirect("/auth/github");
+  }
   next();
 }
 
-/* LANDING */
+// ───── LANDING ─────
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public/index.html"));
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-/* GITHUB OAUTH */
+// ───── DASHBOARD (FORCED AUTH) ─────
+app.get("/dashboard", requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "dashboard.html"));
+});
+
+// ───── GITHUB OAUTH START ─────
 app.get("/auth/github", (req, res) => {
-  const redirect = `${BASE_URL}/auth/github/callback`;
-  res.redirect(
-    `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&scope=repo&redirect_uri=${redirect}`
-  );
+  const redirectUri = `${BASE_URL}/auth/github/callback`;
+
+  const url =
+    "https://github.com/login/oauth/authorize" +
+    `?client_id=${GITHUB_CLIENT_ID}` +
+    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+    `&scope=read:user repo`;
+
+  return res.redirect(url);
 });
 
+// ───── GITHUB CALLBACK ─────
 app.get("/auth/github/callback", async (req, res) => {
   const code = req.query.code;
+  if (!code) return res.redirect("/");
 
-  const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Accept": "application/json" },
-    body: JSON.stringify({
-      client_id: GITHUB_CLIENT_ID,
-      client_secret: GITHUB_CLIENT_SECRET,
-      code
-    })
-  });
+  try {
+    const tokenRes = await fetch(
+      "https://github.com/login/oauth/access_token",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          client_id: GITHUB_CLIENT_ID,
+          client_secret: GITHUB_CLIENT_SECRET,
+          code,
+        }),
+      }
+    );
 
-  const token = await tokenRes.json();
+    const tokenData = await tokenRes.json();
 
-  const userRes = await fetch("https://api.github.com/user", {
-    headers: {
-      Authorization: `Bearer ${token.access_token}`,
-      "User-Agent": "app"
+    if (!tokenData.access_token) {
+      console.log(tokenData);
+      return res.send("OAuth failed (no token)");
     }
-  });
 
-  const ghUser = await userRes.json();
+    const userRes = await fetch("https://api.github.com/user", {
+      headers: {
+        Authorization: `Bearer ${tokenData.access_token}`,
+        "User-Agent": "comet-app",
+      },
+    });
 
-  const db = loadData();
-  const id = "gh_" + ghUser.id;
+    const ghUser = await userRes.json();
 
-  db.users[id] = {
-    id,
-    username: ghUser.login,
-    avatar: ghUser.avatar_url,
-    token: token.access_token
-  };
+    const data = loadData();
+    const userId = `gh_${ghUser.id}`;
 
-  saveData(db);
+    data.users[userId] = {
+      id: userId,
+      username: ghUser.login,
+      avatar: ghUser.avatar_url,
+      token: tokenData.access_token,
+    };
 
-  req.session.user = db.users[id];
-  res.redirect("/dashboard");
+    saveData(data);
+
+    req.session.user = data.users[userId];
+
+    req.session.save(() => {
+      res.redirect("/dashboard");
+    });
+  } catch (err) {
+    console.error(err);
+    res.redirect("/");
+  }
 });
 
-/* USER */
+// ───── LOGOUT ─────
+app.get("/auth/logout", (req, res) => {
+  req.session.destroy(() => {
+    res.clearCookie("connect.sid");
+    res.redirect("/");
+  });
+});
+
+// ───── API ME ─────
 app.get("/api/me", (req, res) => {
   res.json({ user: req.session.user || null });
 });
 
-/* REPOS */
+// ───── GITHUB REPOS ─────
 app.get("/api/repos", requireAuth, async (req, res) => {
-  const r = await fetch("https://api.github.com/user/repos", {
-    headers: {
-      Authorization: `Bearer ${req.session.user.token}`,
-      "User-Agent": "app"
+  const user = req.session.user;
+
+  const r = await fetch(
+    "https://api.github.com/user/repos?per_page=100&sort=updated",
+    {
+      headers: {
+        Authorization: `Bearer ${user.token}`,
+        "User-Agent": "comet-app",
+      },
     }
-  });
+  );
 
-  const data = await r.json();
-
-  res.json(data.map(r => ({
-    name: r.name,
-    full: r.full_name,
-    url: r.clone_url,
-    desc: r.description
-  })));
+  const repos = await r.json();
+  res.json(repos);
 });
 
-/* DEPLOY */
-app.post("/api/deploy", requireAuth, async (req, res) => {
-  const { repoUrl, name } = req.body;
-
-  const slug = name.toLowerCase().replace(/[^a-z0-9]/g, "-");
-  const port = nextPort++;
-
-  const dir = path.join(__dirname, "sites", slug);
-  fs.mkdirSync(dir, { recursive: true });
-
-  execSync(`git clone ${repoUrl} ${dir}`);
-
-  exec(`cd ${dir} && npm install && npm start`, {
-    env: { ...process.env, PORT: port }
-  });
-
-  sites[slug] = {
-    port,
-    name,
-    url: `${BASE_URL}/sites/${slug}`
-  };
-
-  res.json({ ok: true, slug });
+// ───── START ─────
+app.listen(PORT, () => {
+  console.log(`🚀 Running on ${BASE_URL}`);
 });
-
-/* PROXY */
-app.use("/sites/:slug", (req, res) => {
-  const site = sites[req.params.slug];
-  if (!site) return res.send("Not found");
-
-  const http = require("http");
-
-  const options = {
-    hostname: "localhost",
-    port: site.port,
-    path: req.url,
-    method: req.method,
-    headers: req.headers
-  };
-
-  const proxy = http.request(options, r => {
-    res.writeHead(r.statusCode, r.headers);
-    r.pipe(res);
-  });
-
-  req.pipe(proxy);
-});
-
-/* DASHBOARD */
-app.get("/dashboard", requireAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, "public/dashboard.html"));
-});
-
-/* START */
-app.listen(PORT, () => console.log("running:", PORT));
