@@ -3,192 +3,174 @@ const session = require("express-session");
 const path = require("path");
 const fs = require("fs");
 const { execSync, exec } = require("child_process");
-const crypto = require("crypto");
 
 const app = express();
+
 const PORT = process.env.PORT || 3000;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
-const SESSION_SECRET = process.env.SESSION_SECRET || "comet-dev";
 
-// ───────────────── DATA ─────────────────
-const DATA_FILE = path.join(__dirname, "data.json");
-function loadData() {
-  if (!fs.existsSync(DATA_FILE)) return { users: {} };
-  return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-}
-function saveData(d) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(d, null, 2));
-}
+const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID;
+const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET;
+const SESSION_SECRET = process.env.SESSION_SECRET || "dev-secret";
 
-// ───────────────── STATE ─────────────────
-const sites = {};
-let nextPort = 4000;
-
-// ───────────────── MIDDLEWARE ─────────────────
 app.use(express.json());
-app.use(express.static("public"));
+app.use(express.urlencoded({ extended: true }));
 app.use(session({
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false
 }));
 
+app.use(express.static(path.join(__dirname, "public")));
+
+const DATA_FILE = "./data.json";
+const sites = {};
+let nextPort = 4000;
+
+/* DATA */
+function loadData() {
+  if (!fs.existsSync(DATA_FILE)) return { users: {} };
+  return JSON.parse(fs.readFileSync(DATA_FILE));
+}
+function saveData(d) {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(d, null, 2));
+}
+function ts() { return new Date().toISOString(); }
+
 function requireAuth(req, res, next) {
-  if (!req.session.user) return res.status(401).json({ error: "Not logged in" });
+  if (!req.session.user) return res.redirect("/");
   next();
 }
 
-// ───────────────── DEPLOY QUEUE ─────────────────
-const queue = [];
-let deploying = false;
-
-function enqueue(job) {
-  queue.push(job);
-  processQueue();
-}
-
-async function processQueue() {
-  if (deploying || !queue.length) return;
-  deploying = true;
-
-  const job = queue.shift();
-  await deploy(job);
-
-  deploying = false;
-  processQueue();
-}
-
-// ───────────────── HASH CACHE ─────────────────
-function hashRepo(repo, branch) {
-  return crypto.createHash("sha1").update(repo + branch).digest("hex");
-}
-
-// ───────────────── DEPLOY ENGINE ─────────────────
-async function deploy({ slug, repoUrl, branch, port }) {
-  const site = sites[slug];
-
-  const log = (msg) => {
-    const line = `[${new Date().toISOString()}] ${msg}`;
-    site.logs.push(line);
-    console.log(`[${slug}] ${msg}`);
-  };
-
-  try {
-    const cacheKey = hashRepo(repoUrl, branch);
-    const cacheDir = path.join(__dirname, ".cache", cacheKey);
-    const deployDir = path.join(__dirname, "deployments", slug);
-
-    site.status = "cloning";
-    log("Cloning...");
-
-    if (!fs.existsSync(cacheDir)) {
-      fs.mkdirSync(cacheDir, { recursive: true });
-      execSync(`git clone --depth 1 ${repoUrl} "${cacheDir}"`);
-      log("Cached repo.");
-    } else {
-      log("Using cache.");
-    }
-
-    if (fs.existsSync(deployDir)) fs.rmSync(deployDir, { recursive: true });
-    fs.cpSync(cacheDir, deployDir, { recursive: true });
-
-    site.status = "building";
-
-    if (fs.existsSync(path.join(deployDir, "package.json"))) {
-      if (!fs.existsSync(path.join(deployDir, "node_modules"))) {
-        log("Installing deps...");
-        execSync(`cd "${deployDir}" && npm install`, { stdio: "pipe" });
-      } else {
-        log("Using cached deps.");
-      }
-
-      site.status = "starting";
-
-      const child = exec(`cd "${deployDir}" && npm start`, {
-        env: { PORT: port }
-      });
-
-      site.process = child;
-
-      child.stdout.on("data", d => log(d.toString()));
-      child.stderr.on("data", d => log("[ERR] " + d.toString()));
-
-      child.on("exit", () => {
-        site.status = "stopped";
-      });
-
-    } else {
-      log("Static site");
-      startStatic(deployDir, port, slug, log);
-    }
-
-    site.status = "running";
-    log("Live 🚀");
-
-  } catch (e) {
-    site.status = "failed";
-    log("ERROR: " + e.message);
-  }
-}
-
-// ───────────────── STATIC SERVER ─────────────────
-function startStatic(dir, port, slug, log) {
-  const staticApp = express();
-  staticApp.use(express.static(dir));
-  const server = staticApp.listen(port);
-  sites[slug].server = server;
-  log("Static server started");
-}
-
-// ───────────────── API ─────────────────
-app.get("/api/deployments", requireAuth, (req, res) => {
-  res.json(Object.values(sites));
+/* LANDING */
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public/index.html"));
 });
 
-app.post("/api/deploy", requireAuth, (req, res) => {
+/* GITHUB OAUTH */
+app.get("/auth/github", (req, res) => {
+  const redirect = `${BASE_URL}/auth/github/callback`;
+  res.redirect(
+    `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&scope=repo&redirect_uri=${redirect}`
+  );
+});
+
+app.get("/auth/github/callback", async (req, res) => {
+  const code = req.query.code;
+
+  const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Accept": "application/json" },
+    body: JSON.stringify({
+      client_id: GITHUB_CLIENT_ID,
+      client_secret: GITHUB_CLIENT_SECRET,
+      code
+    })
+  });
+
+  const token = await tokenRes.json();
+
+  const userRes = await fetch("https://api.github.com/user", {
+    headers: {
+      Authorization: `Bearer ${token.access_token}`,
+      "User-Agent": "app"
+    }
+  });
+
+  const ghUser = await userRes.json();
+
+  const db = loadData();
+  const id = "gh_" + ghUser.id;
+
+  db.users[id] = {
+    id,
+    username: ghUser.login,
+    avatar: ghUser.avatar_url,
+    token: token.access_token
+  };
+
+  saveData(db);
+
+  req.session.user = db.users[id];
+  res.redirect("/dashboard");
+});
+
+/* USER */
+app.get("/api/me", (req, res) => {
+  res.json({ user: req.session.user || null });
+});
+
+/* REPOS */
+app.get("/api/repos", requireAuth, async (req, res) => {
+  const r = await fetch("https://api.github.com/user/repos", {
+    headers: {
+      Authorization: `Bearer ${req.session.user.token}`,
+      "User-Agent": "app"
+    }
+  });
+
+  const data = await r.json();
+
+  res.json(data.map(r => ({
+    name: r.name,
+    full: r.full_name,
+    url: r.clone_url,
+    desc: r.description
+  })));
+});
+
+/* DEPLOY */
+app.post("/api/deploy", requireAuth, async (req, res) => {
   const { repoUrl, name } = req.body;
 
   const slug = name.toLowerCase().replace(/[^a-z0-9]/g, "-");
   const port = nextPort++;
 
+  const dir = path.join(__dirname, "sites", slug);
+  fs.mkdirSync(dir, { recursive: true });
+
+  execSync(`git clone ${repoUrl} ${dir}`);
+
+  exec(`cd ${dir} && npm install && npm start`, {
+    env: { ...process.env, PORT: port }
+  });
+
   sites[slug] = {
-    slug,
-    name,
-    repoUrl,
     port,
-    status: "queued",
-    logs: [],
+    name,
     url: `${BASE_URL}/sites/${slug}`
   };
 
-  enqueue({ slug, repoUrl, branch: "main", port });
-
-  res.json({ slug });
+  res.json({ ok: true, slug });
 });
 
-app.get("/api/deployments/:slug/logs", (req, res) => {
-  const site = sites[req.params.slug];
-  res.json({ logs: site.logs, status: site.status });
-});
-
-// ───────────────── PROXY ─────────────────
+/* PROXY */
 app.use("/sites/:slug", (req, res) => {
   const site = sites[req.params.slug];
   if (!site) return res.send("Not found");
 
   const http = require("http");
 
-  const proxy = http.request({
+  const options = {
     hostname: "localhost",
     port: site.port,
     path: req.url,
-    method: req.method
-  }, r => r.pipe(res));
+    method: req.method,
+    headers: req.headers
+  };
+
+  const proxy = http.request(options, r => {
+    res.writeHead(r.statusCode, r.headers);
+    r.pipe(res);
+  });
 
   req.pipe(proxy);
 });
 
-// ───────────────── START ─────────────────
-app.listen(PORT, () => {
-  console.log("☄️ Comet running at", BASE_URL);
+/* DASHBOARD */
+app.get("/dashboard", requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, "public/dashboard.html"));
 });
+
+/* START */
+app.listen(PORT, () => console.log("running:", PORT));
