@@ -1,476 +1,76 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dashboard — Comet</title>
-<link href="https://fonts.googleapis.com/css2?family=Cabinet+Grotesk:wght@400;500;700;800;900&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<title>Deploy Platform</title>
 <style>
-*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
-:root{
-  --bg:#07070d;--bg2:#0d0d1a;--bg3:#12121f;--surface:#18182a;--surface2:#1e1e30;
-  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
-  --orange:#f97316;--orange2:#fb923c;--orange3:#fdba74;
-  --blue:#3b82f6;--green:#22c55e;--red:#ef4444;--yellow:#eab308;
-  --text:#f0efff;--muted:#7878a0;
-  --display:'Cabinet Grotesk',sans-serif;
-  --body:'Instrument Sans',sans-serif;
+body{margin:0;font-family:system-ui;background:#05050a;color:white}
+
+section{padding:80px 20px;max-width:1100px;margin:auto}
+
+.hero{text-align:center;padding-top:120px}
+.hero h1{font-size:48px}
+.hero p{color:#aaa}
+
+.btn{
+background:#7c3aed;
+padding:14px 22px;
+border-radius:10px;
+display:inline-block;
+color:white;
+text-decoration:none;
+margin-top:20px;
 }
-html,body{height:100%;font-family:var(--body);background:var(--bg);color:var(--text);}
 
-/* LAYOUT */
-.app{display:grid;grid-template-columns:220px 1fr;grid-template-rows:60px 1fr;min-height:100vh;}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
 
-/* TOP BAR */
-.topbar{grid-column:1/-1;background:rgba(7,7,13,0.95);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 1.5rem;gap:1rem;position:sticky;top:0;z-index:50;}
-.topbar-logo{font-family:var(--display);font-size:1.2rem;font-weight:900;color:var(--text);text-decoration:none;display:flex;align-items:center;gap:6px;margin-right:1rem;}
-.topbar-right{margin-left:auto;display:flex;align-items:center;gap:1rem;}
-.user-pill{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.35rem 0.75rem;font-size:0.84rem;font-weight:500;}
-.user-avatar{width:24px;height:24px;border-radius:50%;object-fit:cover;}
-.btn-logout{background:none;border:none;color:var(--muted);font-size:0.82rem;cursor:pointer;font-family:var(--body);transition:color .2s;text-decoration:none;}
-.btn-logout:hover{color:var(--text);}
+.card{background:#12121c;padding:20px;border-radius:12px}
 
-/* SIDEBAR */
-.sidebar{background:var(--bg2);border-right:1px solid var(--border);padding:1.2rem 0.75rem;display:flex;flex-direction:column;gap:3px;}
-.sidebar-label{font-size:0.68rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);padding:0.4rem 0.75rem;margin-top:0.5rem;}
-.sidebar a,.sidebar button{display:flex;align-items:center;gap:9px;padding:0.6rem 0.75rem;border-radius:8px;font-size:0.86rem;font-weight:500;color:var(--muted);text-decoration:none;transition:all .15s;background:none;border:none;cursor:pointer;font-family:var(--body);width:100%;}
-.sidebar a:hover,.sidebar button:hover,.sidebar a.active{background:var(--surface);color:var(--text);}
-.sidebar a.active{color:var(--orange);}
-.sidebar-icon{font-size:1rem;flex-shrink:0;}
-
-/* MAIN */
-main{padding:2rem;overflow-y:auto;}
-.page{display:none;}
-.page.active{display:block;}
-
-/* DEPLOY PAGE */
-.deploy-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:2rem;flex-wrap:wrap;gap:1rem;}
-.page-title{font-family:var(--display);font-size:1.6rem;font-weight:900;letter-spacing:-0.02em;margin-bottom:0.2rem;}
-.page-sub{font-size:0.87rem;color:var(--muted);}
-.btn-new{background:var(--orange);color:white;padding:0.6rem 1.3rem;border-radius:8px;font-size:0.88rem;font-weight:600;cursor:pointer;font-family:var(--body);border:none;transition:all .2s;display:flex;align-items:center;gap:6px;}
-.btn-new:hover{background:var(--orange2);transform:translateY(-1px);}
-
-/* DEPLOYMENTS LIST */
-.deployments-grid{display:flex;flex-direction:column;gap:1rem;}
-.deploy-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:1.4rem 1.6rem;display:flex;align-items:center;gap:1.2rem;transition:border-color .2s;}
-.deploy-card:hover{border-color:var(--border2);}
-.deploy-status-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
-.dot-running{background:var(--green);box-shadow:0 0 6px var(--green);}
-.dot-building,.dot-cloning,.dot-starting{background:var(--yellow);animation:blink3 1s infinite;}
-.dot-failed,.dot-stopped{background:var(--red);}
-@keyframes blink3{0%,100%{opacity:1;}50%{opacity:0.3;}}
-.deploy-info{flex:1;min-width:0;}
-.deploy-name{font-family:var(--display);font-size:1rem;font-weight:700;margin-bottom:0.2rem;}
-.deploy-url{font-size:0.8rem;color:var(--blue);text-decoration:none;word-break:break-all;}
-.deploy-url:hover{text-decoration:underline;}
-.deploy-meta{font-size:0.76rem;color:var(--muted);margin-top:0.2rem;}
-.deploy-actions{display:flex;gap:0.6rem;flex-shrink:0;flex-wrap:wrap;}
-.btn-action{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:0.4rem 0.8rem;border-radius:6px;font-size:0.78rem;font-weight:500;cursor:pointer;font-family:var(--body);transition:all .15s;}
-.btn-action:hover{background:var(--surface2);border-color:var(--border2);}
-.btn-action.danger:hover{background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.3);color:var(--red);}
-.btn-action.primary{background:var(--orange);border-color:var(--orange);color:white;}
-.btn-action.primary:hover{background:var(--orange2);}
-.empty-state{text-align:center;padding:4rem 2rem;color:var(--muted);}
-.empty-icon{font-size:3rem;margin-bottom:1rem;}
-.empty-state h3{font-family:var(--display);font-size:1.2rem;font-weight:700;color:var(--text);margin-bottom:0.4rem;}
-
-/* REPO MODAL */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(4px);z-index:200;align-items:center;justify-content:center;padding:1rem;}
-.modal-overlay.open{display:flex;}
-.modal{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;width:100%;max-width:580px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;}
-.modal-head{padding:1.4rem 1.6rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
-.modal-head h2{font-family:var(--display);font-size:1.2rem;font-weight:800;}
-.modal-close{background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer;line-height:1;padding:0.25rem;}
-.modal-body{padding:1.4rem 1.6rem;overflow-y:auto;flex:1;}
-.search-box{width:100%;padding:0.7rem 1rem;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--body);font-size:0.88rem;outline:none;margin-bottom:1rem;transition:border .15s;}
-.search-box:focus{border-color:var(--orange);}
-.repo-list{display:flex;flex-direction:column;gap:0.6rem;}
-.repo-item{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:1rem 1.2rem;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:space-between;gap:1rem;}
-.repo-item:hover{border-color:var(--orange);background:var(--surface2);}
-.repo-item-info h4{font-size:0.92rem;font-weight:600;margin-bottom:0.2rem;}
-.repo-item-info p{font-size:0.78rem;color:var(--muted);}
-.repo-lang{font-size:0.72rem;background:rgba(249,115,22,0.12);color:var(--orange3);padding:0.2rem 0.6rem;border-radius:5px;font-weight:600;white-space:nowrap;}
-.repo-private{font-size:0.68rem;color:var(--muted);border:1px solid var(--border);padding:0.15rem 0.5rem;border-radius:4px;}
-.loading-repos{text-align:center;padding:2rem;color:var(--muted);font-size:0.88rem;}
-
-/* LOGS PANEL */
-.logs-panel{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:1rem 1.2rem;font-family:'Courier New',monospace;font-size:0.78rem;line-height:1.9;max-height:320px;overflow-y:auto;color:#a0a0c0;}
-.log-line.success{color:var(--green);}
-.log-line.error{color:var(--red);}
-.log-line.info{color:#67e8f9;}
-
-/* DOMAIN MODAL */
-.domain-form{display:flex;flex-direction:column;gap:1rem;}
-.field-label{font-size:0.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.3rem;}
-.field-input{width:100%;padding:0.7rem 1rem;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--body);font-size:0.88rem;outline:none;transition:border .15s;}
-.field-input:focus{border-color:var(--orange);}
-.dns-box{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:1rem 1.2rem;font-family:'Courier New',monospace;font-size:0.78rem;color:#a0a0c0;margin-top:0.75rem;display:none;}
-.dns-box.show{display:block;}
-.modal-btn{background:var(--orange);color:white;border:none;padding:0.75rem;border-radius:8px;font-size:0.9rem;font-weight:600;cursor:pointer;font-family:var(--body);transition:all .2s;width:100%;}
-.modal-btn:hover{background:var(--orange2);}
-
-/* STATUS BADGE */
-.status-badge{font-size:0.7rem;font-weight:600;padding:0.2rem 0.6rem;border-radius:5px;text-transform:uppercase;letter-spacing:0.05em;}
-.status-running{background:rgba(34,197,94,0.12);color:var(--green);}
-.status-failed,.status-stopped{background:rgba(239,68,68,0.12);color:var(--red);}
-.status-building,.status-cloning,.status-starting{background:rgba(234,179,8,0.12);color:var(--yellow);}
-
-/* SPINNER */
-.spinner{width:18px;height:18px;border:2px solid rgba(255,255,255,0.15);border-top-color:var(--orange);border-radius:50%;animation:spin2 0.7s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px;}
-@keyframes spin2{to{transform:rotate(360deg)}}
-
-@media(max-width:700px){
-  .app{grid-template-columns:1fr;}
-  .sidebar{display:none;}
-  main{padding:1rem;}
-}
+footer{text-align:center;color:#666;padding:40px}
 </style>
 </head>
+
 <body>
 
-<div class="app">
-  <!-- TOP BAR -->
-  <header class="topbar">
-    <a href="/" class="topbar-logo">☄️ Comet</a>
-    <div class="topbar-right">
-      <div class="user-pill">
-        <img class="user-avatar" id="user-avatar" src="" alt="">
-        <span id="user-name">...</span>
-      </div>
-      <a href="/auth/logout" class="btn-logout">Log out</a>
-    </div>
-  </header>
+<section class="hero">
+  <h1>Deploy apps instantly</h1>
+  <p>Connect GitHub. Deploy Node apps. Stay live.</p>
+  <a class="btn" href="/auth/github">Continue with GitHub</a>
+</section>
 
-  <!-- SIDEBAR -->
-  <nav class="sidebar">
-    <a href="#" class="active" onclick="showPage('deployments',this)" data-page="deployments"><span class="sidebar-icon">🚀</span> Deployments</a>
-    <a href="#" onclick="showPage('repos',this)" data-page="repos"><span class="sidebar-icon">📦</span> Repositories</a>
-    <div class="sidebar-label">Account</div>
-    <a href="#" onclick="showPage('settings',this)" data-page="settings"><span class="sidebar-icon">⚙️</span> Settings</a>
-    <a href="/auth/logout" class="btn-logout" style="padding:0.6rem 0.75rem;"><span class="sidebar-icon">👋</span> Log out</a>
-  </nav>
-
-  <!-- MAIN -->
-  <main>
-
-    <!-- DEPLOYMENTS PAGE -->
-    <div class="page active" id="page-deployments">
-      <div class="deploy-header">
-        <div>
-          <div class="page-title">Deployments</div>
-          <div class="page-sub">Your live and in-progress deployments</div>
-        </div>
-        <button class="btn-new" onclick="openDeployModal()">+ New deployment</button>
-      </div>
-      <div class="deployments-grid" id="deployments-list">
-        <div class="empty-state">
-          <div class="empty-icon">🌌</div>
-          <h3>No deployments yet</h3>
-          <p>Click "New deployment" to connect a GitHub repo and go live.</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- REPOS PAGE -->
-    <div class="page" id="page-repos">
-      <div class="deploy-header">
-        <div>
-          <div class="page-title">Repositories</div>
-          <div class="page-sub">Your GitHub repositories</div>
-        </div>
-        <button class="btn-new" onclick="loadRepos(); showPage('repos')">↻ Refresh</button>
-      </div>
-      <div class="repo-list" id="all-repos-list"><div class="loading-repos">Loading repositories...</div></div>
-    </div>
-
-    <!-- SETTINGS PAGE -->
-    <div class="page" id="page-settings">
-      <div class="page-title">Settings</div>
-      <div class="page-sub" style="margin-bottom:2rem">Account and preferences</div>
-      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:1.6rem;max-width:500px;">
-        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem;">
-          <img id="settings-avatar" src="" style="width:52px;height:52px;border-radius:50%;" alt="">
-          <div>
-            <div style="font-family:var(--display);font-size:1.1rem;font-weight:700" id="settings-name"></div>
-            <div style="font-size:0.82rem;color:var(--muted)" id="settings-username"></div>
-          </div>
-        </div>
-        <div style="font-size:0.82rem;color:var(--muted);line-height:1.7">Connected via GitHub OAuth. Your repositories are fetched securely using your GitHub access token.</div>
-      </div>
-    </div>
-
-  </main>
-</div>
-
-<!-- NEW DEPLOYMENT MODAL -->
-<div class="modal-overlay" id="deploy-modal">
-  <div class="modal">
-    <div class="modal-head">
-      <h2>Deploy a repository</h2>
-      <button class="modal-close" onclick="closeModal('deploy-modal')">✕</button>
-    </div>
-    <div class="modal-body">
-      <input class="search-box" placeholder="Search repositories..." id="repo-search" oninput="filterRepos(this.value)">
-      <div class="repo-list" id="modal-repo-list"><div class="loading-repos">Loading your repositories...</div></div>
-    </div>
+<section>
+  <h2>Features</h2>
+  <div class="grid">
+    <div class="card">GitHub OAuth</div>
+    <div class="card">Auto Deploy</div>
+    <div class="card">Node Support</div>
+    <div class="card">Logs</div>
+    <div class="card">Proxy system</div>
+    <div class="card">Custom domains</div>
   </div>
-</div>
+</section>
 
-<!-- LOGS MODAL -->
-<div class="modal-overlay" id="logs-modal">
-  <div class="modal">
-    <div class="modal-head">
-      <h2 id="logs-modal-title">Build logs</h2>
-      <button class="modal-close" onclick="closeModal('logs-modal'); clearInterval(logsInterval)">✕</button>
-    </div>
-    <div class="modal-body">
-      <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
-        <span id="logs-status-badge" class="status-badge">loading</span>
-        <span style="font-size:0.8rem;color:var(--muted)" id="logs-url-link"></span>
-      </div>
-      <div class="logs-panel" id="logs-content"></div>
-    </div>
+<section>
+  <h2>How it works</h2>
+  <div class="card">
+    1. Login with GitHub<br>
+    2. Pick repo<br>
+    3. Deploy instantly<br>
   </div>
-</div>
+</section>
 
-<!-- DOMAIN MODAL -->
-<div class="modal-overlay" id="domain-modal">
-  <div class="modal">
-    <div class="modal-head">
-      <h2>Custom Domain</h2>
-      <button class="modal-close" onclick="closeModal('domain-modal')">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="domain-form">
-        <div>
-          <div class="field-label">Your domain</div>
-          <input class="field-input" id="domain-input" placeholder="e.g. mysite.com or app.mysite.com">
-        </div>
-        <button class="modal-btn" onclick="saveDomain()">Set custom domain</button>
-        <div class="dns-box" id="dns-instructions"></div>
-      </div>
-    </div>
-  </div>
-</div>
+<section>
+  <h2>Deploy instantly</h2>
+  <div class="card">Zero config deployment system</div>
+</section>
 
-<script>
-let user = null;
-let repos = [];
-let deployments = [];
-let activeDomainSlug = null;
-let logsInterval = null;
-let activeLogsSlug = null;
+<section style="text-align:center">
+  <h2>Start now</h2>
+  <a class="btn" href="/auth/github">Login with GitHub</a>
+</section>
 
-// ── INIT ──────────────────────────────────────────────────────────────────────
-async function init() {
-  const res = await fetch('/api/me');
-  const data = await res.json();
-  if (!data.user) { window.location.href = '/'; return; }
-  user = data.user;
-  document.getElementById('user-name').textContent = user.username;
-  document.getElementById('user-avatar').src = user.avatar;
-  document.getElementById('settings-avatar').src = user.avatar;
-  document.getElementById('settings-name').textContent = user.name;
-  document.getElementById('settings-username').textContent = '@' + user.username;
-  await loadDeployments();
-  await loadRepos();
-}
+<footer>
+  Built for fast deployments
+</footer>
 
-// ── PAGE NAV ──────────────────────────────────────────────────────────────────
-function showPage(name, el) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.getElementById('page-' + name).classList.add('active');
-  document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
-  if (el) el.classList.add('active');
-}
-
-// ── DEPLOYMENTS ───────────────────────────────────────────────────────────────
-async function loadDeployments() {
-  const res = await fetch('/api/deployments');
-  deployments = await res.json();
-  renderDeployments();
-}
-
-function renderDeployments() {
-  const el = document.getElementById('deployments-list');
-  if (!deployments.length) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-icon">🌌</div><h3>No deployments yet</h3><p>Click "New deployment" to connect a GitHub repo and go live.</p></div>`;
-    return;
-  }
-  el.innerHTML = deployments.map(d => `
-    <div class="deploy-card" id="card-${d.slug}">
-      <div class="deploy-status-dot dot-${d.status}"></div>
-      <div class="deploy-info">
-        <div class="deploy-name">${d.name} <span class="status-badge status-${d.status}">${d.status}</span></div>
-        <a href="${d.url}" target="_blank" class="deploy-url">${d.url}</a>
-        ${d.customDomain ? `<div style="font-size:0.76rem;color:var(--orange3);margin-top:2px">🔗 ${d.customDomain}</div>` : ''}
-        <div class="deploy-meta">Deployed ${timeAgo(d.createdAt)} · ${d.repoUrl.split('/').pop()}</div>
-      </div>
-      <div class="deploy-actions">
-        <button class="btn-action" onclick="openLogs('${d.slug}')">📋 Logs</button>
-        <button class="btn-action" onclick="openDomainModal('${d.slug}')">🔗 Domain</button>
-        <button class="btn-action" onclick="redeploy('${d.slug}')">↻ Redeploy</button>
-        <button class="btn-action danger" onclick="deleteDeploy('${d.slug}')">🗑 Delete</button>
-      </div>
-    </div>
-  `).join('');
-}
-
-// ── REPOS ─────────────────────────────────────────────────────────────────────
-async function loadRepos() {
-  const res = await fetch('/api/repos');
-  if (!res.ok) { repos = []; return; }
-  repos = await res.json();
-  renderAllRepos();
-  renderModalRepos(repos);
-}
-
-function renderAllRepos() {
-  const el = document.getElementById('all-repos-list');
-  if (!repos.length) { el.innerHTML = '<div class="loading-repos">No repositories found.</div>'; return; }
-  el.innerHTML = repos.map(r => repoItemHTML(r, true)).join('');
-}
-
-function repoItemHTML(r, showDeploy) {
-  return `<div class="repo-item" ${showDeploy ? `onclick="deployRepo('${r.fullName}','${r.name}','${r.url}')"` : ''}>
-    <div class="repo-item-info">
-      <h4>${r.name} ${r.private ? '<span class="repo-private">private</span>' : ''}</h4>
-      <p>${r.description || 'No description'} · Updated ${timeAgo(r.updatedAt)}</p>
-    </div>
-    ${r.language ? `<span class="repo-lang">${r.language}</span>` : ''}
-  </div>`;
-}
-
-function renderModalRepos(list) {
-  const el = document.getElementById('modal-repo-list');
-  if (!list.length) { el.innerHTML = '<div class="loading-repos">No repositories found.</div>'; return; }
-  el.innerHTML = list.map(r => repoItemHTML(r, false)).join('');
-  el.querySelectorAll('.repo-item').forEach((item, i) => {
-    item.onclick = () => deployRepo(list[i].fullName, list[i].name, list[i].url);
-  });
-}
-
-function filterRepos(q) {
-  const filtered = repos.filter(r => r.name.toLowerCase().includes(q.toLowerCase()) || (r.description||'').toLowerCase().includes(q.toLowerCase()));
-  renderModalRepos(filtered);
-}
-
-// ── DEPLOY ────────────────────────────────────────────────────────────────────
-function openDeployModal() {
-  document.getElementById('deploy-modal').classList.add('open');
-  if (!repos.length) loadRepos();
-  else renderModalRepos(repos);
-}
-
-async function deployRepo(fullName, name, url) {
-  closeModal('deploy-modal');
-  const res = await fetch('/api/deploy', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ repoUrl: url, repoName: name, branch: 'main' })
-  });
-  const data = await res.json();
-  if (data.slug) {
-    await loadDeployments();
-    openLogs(data.slug);
-  }
-}
-
-async function redeploy(slug) {
-  await fetch(`/api/deployments/${slug}/redeploy`, { method: 'POST' });
-  await loadDeployments();
-  openLogs(slug);
-}
-
-async function deleteDeploy(slug) {
-  if (!confirm(`Delete this deployment? This cannot be undone.`)) return;
-  await fetch(`/api/deployments/${slug}`, { method: 'DELETE' });
-  await loadDeployments();
-}
-
-// ── LOGS ──────────────────────────────────────────────────────────────────────
-function openLogs(slug) {
-  activeLogsSlug = slug;
-  const dep = deployments.find(d => d.slug === slug);
-  document.getElementById('logs-modal').classList.add('open');
-  document.getElementById('logs-modal-title').textContent = `Logs — ${dep?.name || slug}`;
-  fetchLogs(slug);
-  clearInterval(logsInterval);
-  logsInterval = setInterval(() => fetchLogs(slug), 2000);
-}
-
-async function fetchLogs(slug) {
-  const res = await fetch(`/api/deployments/${slug}/logs`);
-  const data = await res.json();
-  const el = document.getElementById('logs-content');
-  el.innerHTML = data.logs.map(line => {
-    const cls = line.includes('ERROR') || line.includes('error') ? 'error' : line.includes('✓') || line.includes('Live') ? 'success' : line.includes('ℹ') || line.includes('Detected') ? 'info' : '';
-    return `<div class="log-line ${cls}">${escHtml(line)}</div>`;
-  }).join('');
-  el.scrollTop = el.scrollHeight;
-  const badge = document.getElementById('logs-status-badge');
-  badge.className = `status-badge status-${data.status}`;
-  badge.textContent = data.status;
-  const urlEl = document.getElementById('logs-url-link');
-  const dep = deployments.find(d => d.slug === slug);
-  if (dep && data.status === 'running') {
-    urlEl.innerHTML = `<a href="${dep.url}" target="_blank" style="color:var(--blue)">${dep.url}</a>`;
-  }
-  // Refresh the deployments list silently
-  if (['running','failed','stopped'].includes(data.status)) {
-    clearInterval(logsInterval);
-    loadDeployments();
-  }
-}
-
-// ── CUSTOM DOMAIN ─────────────────────────────────────────────────────────────
-function openDomainModal(slug) {
-  activeDomainSlug = slug;
-  const dep = deployments.find(d => d.slug === slug);
-  document.getElementById('domain-input').value = dep?.customDomain || '';
-  document.getElementById('dns-instructions').classList.remove('show');
-  document.getElementById('domain-modal').classList.add('open');
-}
-
-async function saveDomain() {
-  const domain = document.getElementById('domain-input').value.trim();
-  if (!domain) return;
-  const res = await fetch(`/api/deployments/${activeDomainSlug}/domain`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ domain })
-  });
-  const data = await res.json();
-  if (data.ok) {
-    const box = document.getElementById('dns-instructions');
-    box.textContent = `DNS Setup:\nAdd a CNAME record:\n  Name: ${domain}\n  Value: ${location.hostname}\n\nOnce DNS propagates (up to 48h) your site will be accessible at ${domain}`;
-    box.classList.add('show');
-    await loadDeployments();
-  }
-}
-
-// ── UTILS ─────────────────────────────────────────────────────────────────────
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
-function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function timeAgo(iso) {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff/60000);
-  if (mins < 2) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins/60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs/24)}d ago`;
-}
-
-// Close modals on overlay click
-document.querySelectorAll('.modal-overlay').forEach(o => {
-  o.addEventListener('click', e => { if (e.target === o) { closeModal(o.id); clearInterval(logsInterval); } });
-});
-
-// Refresh deployments every 5s while on dashboard
-setInterval(loadDeployments, 5000);
-
-init();
-</script>
 </body>
 </html>
