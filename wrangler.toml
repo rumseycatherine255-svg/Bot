@@ -13,7 +13,7 @@ routes = [
 # Then paste the id below
 [[kv_namespaces]]
 binding = "COMET_KV"
-id = "REPLACE_WITH_YOUR_KV_ID"
+id = "4e5e9c9073334332b8fed0e58c522e42"
 
 [vars]
 GITHUB_CLIENT_ID = "Ov23liiMU7Ewpe7xpuAB"
