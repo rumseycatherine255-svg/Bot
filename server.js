@@ -2,19 +2,14 @@ const express = require("express");
 const session = require("express-session");
 const path = require("path");
 const fs = require("fs");
-const { execSync, exec } = require("child_process");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
-const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID;
-const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET;
-const SESSION_SECRET = process.env.SESSION_SECRET || "secret";
-
-// ───── STORAGE (FIX: deployments persist now) ─────
 const DATA_FILE = path.join(__dirname, "data.json");
 
+// ───── STORAGE ─────
 function loadData() {
   if (!fs.existsSync(DATA_FILE)) return { users: {}, deployments: {} };
   return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
@@ -30,7 +25,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use(
   session({
-    secret: SESSION_SECRET,
+    secret: "secret",
     resave: false,
     saveUninitialized: false,
   })
@@ -43,94 +38,12 @@ function requireAuth(req, res, next) {
   next();
 }
 
-// ───── LANDING ─────
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
 // ───── DASHBOARD ─────
 app.get("/dashboard", requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "public", "dashboard.html"));
 });
 
-// ───── GITHUB OAUTH ─────
-app.get("/auth/github", (req, res) => {
-  const redirect = `${BASE_URL}/auth/github/callback`;
-
-  const url =
-    `https://github.com/login/oauth/authorize` +
-    `?client_id=${GITHUB_CLIENT_ID}` +
-    `&redirect_uri=${encodeURIComponent(redirect)}` +
-    `&scope=read:user repo`;
-
-  res.redirect(url);
-});
-
-// ───── CALLBACK ─────
-app.get("/auth/github/callback", async (req, res) => {
-  const code = req.query.code;
-
-  const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({
-      client_id: GITHUB_CLIENT_ID,
-      client_secret: GITHUB_CLIENT_SECRET,
-      code,
-    }),
-  });
-
-  const token = await tokenRes.json();
-
-  const userRes = await fetch("https://api.github.com/user", {
-    headers: {
-      Authorization: `Bearer ${token.access_token}`,
-      "User-Agent": "app",
-    },
-  });
-
-  const ghUser = await userRes.json();
-
-  const data = loadData();
-
-  const userId = `gh_${ghUser.id}`;
-
-  data.users[userId] = {
-    id: userId,
-    username: ghUser.login,
-    avatar: ghUser.avatar_url,
-    token: token.access_token,
-  };
-
-  saveData(data);
-
-  req.session.user = data.users[userId];
-
-  res.redirect("/dashboard");
-});
-
-// ───── API: USER ─────
-app.get("/api/me", (req, res) => {
-  res.json({ user: req.session.user || null });
-});
-
-// ───── API: REPOS ─────
-app.get("/api/repos", requireAuth, async (req, res) => {
-  const r = await fetch(
-    "https://api.github.com/user/repos?per_page=100&sort=updated",
-    {
-      headers: {
-        Authorization: `Bearer ${req.session.user.token}`,
-        "User-Agent": "app",
-      },
-    }
-  );
-
-  const repos = await r.json();
-  res.json(repos);
-});
-
-// ───── API: DEPLOY (FIXED — NOW SAVES) ─────
+// ───── API DEPLOY ─────
 app.post("/api/deploy", requireAuth, (req, res) => {
   const { repoName, repoUrl } = req.body;
 
@@ -143,9 +56,9 @@ app.post("/api/deploy", requireAuth, (req, res) => {
     name: repoName,
     repoUrl,
     status: "running",
-    url: `${BASE_URL}/sites/${id}`,
-    createdAt: new Date().toISOString(),
-    logs: ["Deploy started..."],
+    createdAt: Date.now(),
+    logs: ["Deploy started"],
+    customDomain: null,
   };
 
   saveData(data);
@@ -153,50 +66,94 @@ app.post("/api/deploy", requireAuth, (req, res) => {
   res.json({ ok: true, id });
 });
 
-// ───── API: DEPLOYMENTS (FIXED) ─────
+// ───── GET DEPLOYMENTS ─────
 app.get("/api/deployments", requireAuth, (req, res) => {
   const data = loadData();
-
-  const list = Object.values(data.deployments || {}).filter(Boolean);
-
-  res.json(list);
+  res.json(Object.values(data.deployments || {}));
 });
 
-// ───── API: DELETE ─────
+// ───── DELETE DEPLOYMENT ─────
 app.delete("/api/deployments/:id", requireAuth, (req, res) => {
   const data = loadData();
-
   delete data.deployments[req.params.id];
-
   saveData(data);
-
   res.json({ ok: true });
 });
 
-// ───── API: REDEPLOY ─────
+// ───── REDEPLOY ─────
 app.post("/api/deployments/:id/redeploy", requireAuth, (req, res) => {
   const data = loadData();
 
-  if (!data.deployments[req.params.id]) return res.json({ ok: false });
+  const d = data.deployments[req.params.id];
+  if (!d) return res.json({ ok: false });
 
-  data.deployments[req.params.id].logs.push("Redeploy triggered...");
+  d.logs.push("Redeploy triggered");
+  d.status = "running";
 
   saveData(data);
-
   res.json({ ok: true });
 });
 
-// ───── SERVE DEPLOYED SITE ─────
-app.get("/sites/:id", (req, res) => {
-  res.send(`<h1>Deployed site: ${req.params.id}</h1>`);
+// ───── DOMAIN SYSTEM (FIXED) ─────
+app.post("/api/deployments/:id/domain", requireAuth, (req, res) => {
+  const { domain } = req.body;
+
+  const data = loadData();
+  const d = data.deployments[req.params.id];
+
+  if (!d) return res.status(404).json({ error: "not found" });
+
+  d.customDomain = domain;
+
+  saveData(data);
+
+  res.json({
+    ok: true,
+    dns: `Point ${domain} → ${BASE_URL}`,
+  });
 });
 
-// ───── LOGOUT ─────
-app.get("/auth/logout", (req, res) => {
-  req.session.destroy(() => res.redirect("/"));
+// ───── DOMAIN ROUTER (THIS WAS MISSING!) ─────
+app.use((req, res, next) => {
+  const data = loadData();
+
+  const host = req.headers.host?.replace("www.", "");
+
+  const match = Object.values(data.deployments || {}).find(
+    (d) => d.customDomain === host
+  );
+
+  if (match) {
+    return res.send(`
+      <h1>🚀 Domain Connected</h1>
+      <p>This domain is mapped to deployment:</p>
+      <b>${match.name}</b>
+    `);
+  }
+
+  next();
+});
+
+// ───── DEFAULT SITE ROUTE ─────
+app.get("/sites/:id", (req, res) => {
+  const data = loadData();
+  const d = data.deployments[req.params.id];
+
+  if (!d) return res.status(404).send("Not found");
+
+  res.send(`
+    <h1>${d.name}</h1>
+    <p>Deployment running</p>
+    <p>Domain: ${d.customDomain || "none"}</p>
+  `);
+});
+
+// ───── API ME ─────
+app.get("/api/me", (req, res) => {
+  res.json({ user: req.session.user || null });
 });
 
 // ───── START ─────
 app.listen(PORT, () => {
-  console.log("Running on", BASE_URL);
+  console.log("running", BASE_URL);
 });
