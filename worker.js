@@ -1,9 +1,8 @@
 export default {
   async fetch(request, env) {
 
-    // quick health check
     if (request.method === "GET") {
-      return new Response("☄️ Comet API running");
+      return new Response("API OK");
     }
 
     try {
@@ -18,27 +17,23 @@ export default {
         },
         body: JSON.stringify({
           model: "claude-3-5-sonnet-20241022",
-          max_tokens: 700,
-          messages: [
-            { role: "user", content: message }
-          ]
+          max_tokens: 500,
+          messages: [{ role: "user", content: message }]
         })
       });
 
       const data = await res.json();
 
       return new Response(JSON.stringify({
-        reply: data.content?.[0]?.text || JSON.stringify(data)
+        reply: data.content?.[0]?.text ?? "No response"
       }), {
         headers: { "Content-Type": "application/json" }
       });
 
-    } catch (err) {
+    } catch (e) {
       return new Response(JSON.stringify({
-        reply: "Error: " + err.message
-      }), {
-        headers: { "Content-Type": "application/json" }
-      });
+        reply: e.message
+      }));
     }
   }
 };
