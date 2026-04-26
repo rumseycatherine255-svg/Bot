@@ -2,130 +2,53 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Comet AI</title>
-
+<title>Chat</title>
 <style>
-body {
-  margin: 0;
-  font-family: system-ui;
-  background: #0b0c10;
-  color: white;
-  height: 100vh;
-  display: flex;
-}
-
-.main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.chat {
-  flex: 1;
-  padding: 20px;
-  overflow-y: auto;
-  max-width: 900px;
-  margin: auto;
-  width: 100%;
-}
-
-.msg {
-  margin: 10px 0;
-  padding: 10px 14px;
-  border-radius: 10px;
-  max-width: 70%;
-  white-space: pre-wrap;
-}
-
-.user {
-  background: #2a2f3a;
-  margin-left: auto;
-}
-
-.ai {
-  background: #161a22;
-  margin-right: auto;
-}
-
-.inputBar {
-  display: flex;
-  gap: 10px;
-  padding: 12px;
-  border-top: 1px solid #222;
-  max-width: 900px;
-  margin: auto;
-  width: 100%;
-}
-
-textarea {
-  flex: 1;
-  background: #1a1d25;
-  border: none;
-  border-radius: 8px;
-  padding: 10px;
-  color: white;
-  resize: none;
-  outline: none;
-}
-
-button {
-  background: #6aa9ff;
-  border: none;
-  padding: 10px 14px;
-  border-radius: 8px;
-  cursor: pointer;
-}
+body { font-family: sans-serif; background:#111; color:#fff; margin:0; }
+#chat { padding:20px; height:80vh; overflow:auto; }
+.msg { margin:10px 0; padding:10px; border-radius:8px; max-width:70%; }
+.user { background:#333; margin-left:auto; }
+.ai { background:#222; }
+#bar { display:flex; padding:10px; }
+input { flex:1; padding:10px; }
+button { padding:10px; }
 </style>
 </head>
-
 <body>
 
-<div class="main">
+<div id="chat"></div>
 
-  <div id="chat" class="chat"></div>
-
-  <div class="inputBar">
-    <textarea id="input" placeholder="Message Comet..."></textarea>
-    <button onclick="send()">Send</button>
-  </div>
-
+<div id="bar">
+  <input id="input" />
+  <button onclick="send()">Send</button>
 </div>
 
 <script>
-const WORKER_URL = "YOUR_WORKER_URL_HERE";
+const API = "YOUR_WORKER_URL";
+
+function add(text, cls) {
+  const div = document.createElement("div");
+  div.className = "msg " + cls;
+  div.textContent = text;
+  document.getElementById("chat").appendChild(div);
+}
 
 async function send() {
   const input = document.getElementById("input");
   const text = input.value;
-
-  if (!text.trim()) return;
-
-  addMessage("user", text);
-
   input.value = "";
 
-  const res = await fetch(WORKER_URL, {
+  add(text, "user");
+
+  const res = await fetch(API, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
+    headers: {"Content-Type":"application/json"},
     body: JSON.stringify({ message: text })
   });
 
   const data = await res.json();
 
-  addMessage("ai", data.reply || "No response");
-}
-
-function addMessage(role, text) {
-  const chat = document.getElementById("chat");
-
-  const div = document.createElement("div");
-  div.className = "msg " + role;
-  div.textContent = text;
-
-  chat.appendChild(div);
-  chat.scrollTop = chat.scrollHeight;
+  add(data.reply, "ai");
 }
 </script>
 
