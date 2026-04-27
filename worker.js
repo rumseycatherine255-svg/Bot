@@ -2,119 +2,192 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    // --- ADMIN LOGIN LOGIC ---
+    // 1. DATABASE SYNC: Get current totals from Cloudflare KV
+    let scores = await env.STARS_DB.get("totals", { type: "json" });
+    if (!scores) {
+      scores = { Yellow: 0, Red: 0, Blue: 0, Green: 0 };
+    }
+
+    // 2. ROUTE: Admin Login/Update Page
     if (url.pathname === "/admin") {
       if (request.method === "POST") {
         const formData = await request.formData();
-        if (formData.get("user") === "admin" && formData.get("pass") === "cmstars") {
-          // Update scores in database
-          const scores = {
-            Yellow: formData.get("Yellow") || 0,
-            Red: formData.get("Red") || 0,
-            Blue: formData.get("Blue") || 0,
-            Green: formData.get("Green") || 0
+        const user = formData.get("user");
+        const pass = formData.get("pass");
+
+        if (user === "admin" && pass === "cmstars") {
+          const newScores = {
+            Yellow: parseInt(formData.get("Yellow") || 0),
+            Red: parseInt(formData.get("Red") || 0),
+            Blue: parseInt(formData.get("Blue") || 0),
+            Green: parseInt(formData.get("Green") || 0)
           };
-          await env.STARS_DB.put("totals", JSON.stringify(scores));
-          return new Response("Scores Updated! <a href='/'>View Track</a>", { headers: { "Content-Type": "text/html" } });
+          await env.STARS_DB.put("totals", JSON.stringify(newScores));
+          return new Response("Success! <a href='/'>Click here to see the race!</a>", { 
+            headers: { "Content-Type": "text/html" } 
+          });
         }
-        return new Response("Invalid Login", { status: 403 });
+        return new Response("Unauthorized. Check username/password.", { status: 403 });
       }
-      return new Response(adminPage(), { headers: { "Content-Type": "text/html" } });
+      return new Response(renderAdminPage(scores), { headers: { "Content-Type": "text/html" } });
     }
 
-    // --- MAIN DISPLAY PAGE ---
-    const data = await env.STARS_DB.get("totals", { type: "json" }) || { Yellow: 0, Red: 0, Blue: 0, Green: 0 };
-    return new Response(mainPage(data), { headers: { "Content-Type": "text/html" } });
+    // 3. ROUTE: Main Racing Track
+    return new Response(renderMainTrack(scores), { headers: { "Content-Type": "text/html" } });
   }
 };
 
-function mainPage(scores) {
-  // Calculate max score to determine race progress (e.g., 1000 is finish line)
-  const goal = 1000; 
-  const getPos = (val) => Math.min((val / goal) * 85, 85); // Caps at 85% across screen
+// --- HTML GENERATION FUNCTIONS ---
+
+function renderMainTrack(scores) {
+  // Goal is 1000 stars to reach the finish line
+  const goal = 1000;
+  const calcPos = (val) => Math.min((val / goal) * 85, 88); 
 
   return `
   <!DOCTYPE html>
-  <html>
+  <html lang="en">
   <head>
-    <title>TAB Junior Community Stars</title>
-    <link href="https://fonts.googleapis.com/css2?family=Bungee&display=swap" rel="stylesheet">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TAB Junior F1 Star Race</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Oswald:wght@700&display=swap" rel="stylesheet">
     <style>
-      body { background: #222; color: white; font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 20px; }
-      h1 { text-align: center; font-family: 'Bungee', cursive; color: #ffeb3b; text-shadow: 2px 2px #000; }
-      .track-container { background: #333; border: 5px solid #555; padding: 20px; border-radius: 15px; position: relative; overflow: hidden; }
+      :root {
+        --lewes: #FFD700; --amberley: #FF4136; --hastings: #0074D9; --bramber: #2ECC40;
+      }
+      body { 
+        background: #1a1a1a; color: white; font-family: 'Oswald', sans-serif; 
+        margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center;
+      }
+      h1 { font-family: 'Bungee', cursive; font-size: 2.5rem; color: #fff; text-shadow: 4px 4px #e74c3c; margin-bottom: 10px; text-align:center; }
       
-      /* The Racing Lines */
-      .lane { height: 80px; border-bottom: 2px dashed #666; position: relative; display: flex; align-items: center; }
+      .track-area { 
+        width: 95%; max-width: 1000px; background: #333; border: 8px solid #444; 
+        border-radius: 20px; position: relative; padding: 20px 0; margin-top: 20px;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+      }
+      
+      .finish-line { 
+        position: absolute; right: 40px; top: 0; bottom: 0; width: 30px; 
+        background: repeating-conic-gradient(#fff 0% 25%, #000 0% 50%) 50% / 20px 20px;
+        border-left: 2px solid #fff; border-right: 2px solid #fff; z-index: 1;
+      }
+
+      .lane { 
+        height: 100px; border-bottom: 2px dashed #555; position: relative; 
+        display: flex; align-items: center; z-index: 2;
+      }
       .lane:last-child { border-bottom: none; }
-      .lane-label { width: 120px; font-weight: bold; font-size: 1.2rem; text-transform: uppercase; }
       
-      .finish-line { position: absolute; right: 50px; top: 0; bottom: 0; width: 20px; background: repeating-conic-gradient(#fff 0% 25%, #000 0% 50%) 50% / 20px 20px; }
-      
-      .car { 
-        position: absolute; height: 50px; transition: left 2s ease-in-out; 
+      .house-name { 
+        width: 120px; padding-left: 20px; font-size: 1.4rem; letter-spacing: 1px;
+        text-transform: uppercase; text-shadow: 2px 2px #000;
+      }
+
+      .car-container {
+        position: absolute; height: 60px; transition: left 2.5s cubic-bezier(0.45, 0.05, 0.55, 0.95);
         display: flex; flex-direction: column; align-items: center;
       }
-      .car-icon { font-size: 40px; }
-      .score-bubble { background: white; color: black; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem; font-weight: bold; margin-top: -5px; }
       
-      .lewes { color: #FFD700; } .amberley { color: #FF4136; } .hastings { color: #0074D9; } .bramber { color: #2ECC40; }
+      .f1-car { font-size: 50px; line-height: 1; filter: drop-shadow(2px 4px 6px black); }
+      .score-tag { 
+        background: #fff; color: #000; padding: 2px 10px; border-radius: 5px; 
+        font-size: 1rem; font-weight: 900; margin-top: -5px; border: 2px solid #000;
+      }
+
+      .footer { margin-top: 30px; color: #666; font-size: 0.9rem; text-decoration: none; }
     </style>
   </head>
   <body>
-    <h1>TAB Junior Community Star Race</h1>
-    <div class="track-container">
+    <h1>COMMUNITY STAR TOTALS</h1>
+    
+    <div class="track-area">
       <div class="finish-line"></div>
       
-      <div class="lane"><span class="lane-label lewes">Lewes</span>
-        <div class="car" style="left: ${getPos(scores.Yellow)}%">
-          <div class="car-icon">🏎️</div>
-          <div class="score-bubble">${scores.Yellow}</div>
+      <div class="lane">
+        <div class="house-name" style="color: var(--lewes)">Lewes</div>
+        <div class="car-container" style="left: ${calcPos(scores.Yellow)}%">
+          <div class="f1-car">🏎️</div>
+          <div class="score-tag">${scores.Yellow}</div>
         </div>
       </div>
 
-      <div class="lane"><span class="lane-label amberley">Amberley</span>
-        <div class="car" style="left: ${getPos(scores.Red)}%">
-          <div class="car-icon" style="filter: hue-rotate(140deg);">🏎️</div>
-          <div class="score-bubble">${scores.Red}</div>
+      <div class="lane">
+        <div class="house-name" style="color: var(--amberley)">Amberley</div>
+        <div class="car-container" style="left: ${calcPos(scores.Red)}%">
+          <div class="f1-car" style="filter: hue-rotate(140deg);">🏎️</div>
+          <div class="score-tag">${scores.Red}</div>
         </div>
       </div>
 
-      <div class="lane"><span class="lane-label hastings">Hastings</span>
-        <div class="car" style="left: ${getPos(scores.Blue)}%">
-          <div class="car-icon" style="filter: hue-rotate(200deg);">🏎️</div>
-          <div class="score-bubble">${scores.Blue}</div>
+      <div class="lane">
+        <div class="house-name" style="color: var(--hastings)">Hastings</div>
+        <div class="car-container" style="left: ${calcPos(scores.Blue)}%">
+          <div class="f1-car" style="filter: hue-rotate(210deg);">🏎️</div>
+          <div class="score-tag">${scores.Blue}</div>
         </div>
       </div>
 
-      <div class="lane"><span class="lane-label bramber">Bramber</span>
-        <div class="car" style="left: ${getPos(scores.Green)}%">
-          <div class="car-icon" style="filter: hue-rotate(280deg);">🏎️</div>
-          <div class="score-bubble">${scores.Green}</div>
+      <div class="lane">
+        <div class="house-name" style="color: var(--bramber)">Bramber</div>
+        <div class="car-container" style="left: ${calcPos(scores.Green)}%">
+          <div class="f1-car" style="filter: hue-rotate(280deg);">🏎️</div>
+          <div class="score-tag">${scores.Green}</div>
         </div>
       </div>
     </div>
-    <p style="text-align:center; color: #888;">Admin: /admin</p>
+
+    <a href="/admin" class="footer">Staff Login</a>
   </body>
   </html>`;
 }
 
-function adminPage() {
+function renderAdminPage(scores) {
   return `
   <!DOCTYPE html>
   <html>
-  <head><title>Admin Login</title></head>
-  <body style="font-family:sans-serif; padding: 50px; text-align: center;">
-    <h2>Update Star Totals</h2>
-    <form method="POST" style="display: inline-block; text-align: left; background: #f4f4f4; padding: 20px; border-radius: 8px;">
-      <input type="text" name="user" placeholder="Username" required><br><br>
-      <input type="password" name="pass" placeholder="Password" required><br><hr>
-      Lewes (Yellow): <input type="number" name="Yellow"><br><br>
-      Amberley (Red): <input type="number" name="Red"><br><br>
-      Hastings (Blue): <input type="number" name="Blue"><br><br>
-      Bramber (Green): <input type="number" name="Green"><br><br>
-      <button type="submit" style="width:100%; padding: 10px; background: #28a745; color: white; border: none;">Update Race</button>
-    </form>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Update Stars</title>
+    <style>
+      body { font-family: sans-serif; background: #f0f0f0; display: flex; justify-content: center; padding-top: 50px; }
+      .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+      input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 1rem; }
+      button { width: 100%; padding: 15px; background: #0074D9; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 1.1rem; font-weight: bold; }
+      label { font-weight: bold; font-size: 0.9rem; color: #555; }
+      .house-row { margin-bottom: 15px; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h2 style="margin-top:0">Update Star Totals</h2>
+      <form method="POST">
+        <label>Login Credentials</label>
+        <input type="text" name="user" placeholder="Username" required>
+        <input type="password" name="pass" placeholder="Password" required>
+        <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
+        
+        <div class="house-row">
+          <label style="color:#d4af37">Lewes (Yellow)</label>
+          <input type="number" name="Yellow" value="${scores.Yellow}">
+        </div>
+        <div class="house-row">
+          <label style="color:#FF4136">Amberley (Red)</label>
+          <input type="number" name="Red" value="${scores.Red}">
+        </div>
+        <div class="house-row">
+          <label style="color:#0074D9">Hastings (Blue)</label>
+          <input type="number" name="Blue" value="${scores.Blue}">
+        </div>
+        <div class="house-row">
+          <label style="color:#2ECC40">Bramber (Green)</label>
+          <input type="number" name="Green" value="${scores.Green}">
+        </div>
+        
+        <button type="submit">Update Track</button>
+      </form>
+    </div>
   </body>
   </html>`;
 }
