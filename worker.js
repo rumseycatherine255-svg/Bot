@@ -54,12 +54,19 @@ function renderRace(view, starData) {
     <title>TAB Community Stars</title>
     <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Oswald:wght@700&display=swap" rel="stylesheet">
     <style>
-      body { background: #0a0a0a; font-family: 'Oswald', sans-serif; margin: 0; text-align: center; color: white; overflow-x: hidden; min-height: 100vh; display: flex; flex-direction: column; }
-      nav { background: #000; padding: 15px; display: flex; justify-content: center; gap: 10px; border-bottom: 2px solid #333; }
+      body { background: #0a0a0a; font-family: 'Oswald', sans-serif; margin: 0; text-align: center; color: white; overflow-x: hidden; }
+      
+      /* Arthur's Credit - Top Left */
+      .credit { 
+        position: absolute; top: 10px; left: 15px; font-size: 0.8rem; color: #666; 
+        letter-spacing: 1px; font-family: sans-serif; z-index: 10;
+      }
+
+      nav { background: #000; padding: 15px; display: flex; justify-content: center; gap: 10px; border-bottom: 2px solid #333; position: relative; }
       .nav-btn { color: #888; text-decoration: none; padding: 8px 15px; background: #222; border-radius: 5px; font-weight: bold; }
       .active { background: #e10600; color: white; }
       
-      .container { max-width: 1100px; margin: 20px auto; padding: 20px; flex-grow: 1; }
+      .container { max-width: 1100px; margin: 20px auto; padding: 20px; }
       h1 { font-family: 'Bungee'; font-size: 3rem; margin-bottom: 10px; color: #fff; text-shadow: 0 0 20px rgba(255,0,0,0.4); }
       
       #countdown { 
@@ -89,11 +96,10 @@ function renderRace(view, starData) {
       .bubble { background: #e10600; color: #fff; font-size: 20px; padding: 4px 15px; border-radius: 4px; margin-top: 5px; display: none; font-weight: bold; font-family: 'Bungee'; border: 2px solid white; }
 
       .scale { display: flex; justify-content: space-between; margin-left: 160px; margin-top: 25px; border-top: 8px solid #fff; padding-top: 10px; color: #666; font-size: 1.4rem; font-family: 'Bungee'; }
-      
-      footer { padding: 20px; color: white; font-size: 1rem; letter-spacing: 1px; }
     </style>
   </head>
   <body>
+    <div class="credit">Designed by Arthur Chapman - 6MC</div>
     <div id="countdown">3</div>
     <audio id="snd-drum" src="https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3"></audio>
 
@@ -118,10 +124,6 @@ function renderRace(view, starData) {
         <div class="scale"><span>0</span><span>1000</span><span>2000</span><span>3000</span><span>4000</span><span>5000</span></div>
       </div>
     </div>
-
-    <footer>
-      Designed by Arthur Chapman - 6MC
-    </footer>
 
     <script>
       const drum = document.getElementById('snd-drum');
