@@ -1,15 +1,12 @@
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-
-    // Initial Data Setup
     const defaultScores = {
       WholeSchool: {y:0, r:0, b:0, g:0},
       Y3: {y:0, r:0, b:0, g:0}, Y4: {y:0, r:0, b:0, g:0},
       Y5: {y:0, r:0, b:0, g:0}, Y6: {y:0, r:0, b:0, g:0}
     };
 
-    // 1. Get data from KV
     let starData;
     try {
       const kvData = await env.STARS_DB.get("tab_junior_scores");
@@ -18,11 +15,9 @@ export default {
       starData = defaultScores;
     }
 
-    // --- ADMIN PAGE ---
     if (url.pathname === "/admin") {
       if (request.method === "POST") {
         const formData = await request.formData();
-        // Check credentials
         if (formData.get("user") === "admin" && formData.get("pass") === "cmstars") {
           const keys = ['WholeSchool', 'Y3', 'Y4', 'Y5', 'Y6'];
           const newScores = {};
@@ -34,16 +29,14 @@ export default {
               g: parseInt(formData.get(`${k}_g`) || 0)
             };
           });
-          // Save to KV Database
           await env.STARS_DB.put("tab_junior_scores", JSON.stringify(newScores));
-          return new Response("<h1>Scores Saved!</h1><p>The race is now updated for everyone.</p><a href='/'>Go to Race Track</a>", { headers: {"Content-Type": "text/html"} });
+          return new Response("<h1>Saved!</h1><a href='/'>Back to Race</a>", { headers: {"Content-Type": "text/html"} });
         }
-        return new Response("Wrong Username/Password", { status: 403 });
+        return new Response("Unauthorized", { status: 403 });
       }
       return new Response(renderAdmin(starData), { headers: {"Content-Type": "text/html"} });
     }
 
-    // --- MAIN RACE PAGE ---
     const view = url.searchParams.get("view") || "WholeSchool";
     return new Response(renderRace(view, starData), { headers: {"Content-Type": "text/html"} });
   }
@@ -61,77 +54,127 @@ function renderRace(view, starData) {
     <title>TAB Community Stars</title>
     <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Oswald:wght@700&display=swap" rel="stylesheet">
     <style>
-      body { background: #fdfdfd; font-family: 'Oswald', sans-serif; margin: 0; text-align: center; }
-      nav { background: #111; padding: 15px; display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap; }
-      .nav-btn { color: #bbb; text-decoration: none; padding: 10px 15px; background: #333; border-radius: 5px; transition: 0.3s; }
-      .nav-btn:hover { color: white; background: #444; }
+      body { background: #0a0a0a; font-family: 'Oswald', sans-serif; margin: 0; text-align: center; color: white; overflow-x: hidden; }
+      nav { background: #000; padding: 15px; display: flex; justify-content: center; gap: 10px; border-bottom: 2px solid #333; }
+      .nav-btn { color: #888; text-decoration: none; padding: 8px 15px; background: #222; border-radius: 5px; font-weight: bold; }
       .active { background: #e74c3c; color: white; }
-      .staff-btn { background: #555; border: 1px solid #777; font-size: 0.85rem; margin-left: 20px; }
-
-      .container { max-width: 1100px; margin: 30px auto; padding: 20px; }
-      h1 { font-family: 'Bungee'; margin-bottom: 20px; font-size: 2.5rem; color: #222; }
       
-      #start-btn { padding: 15px 40px; font-family: 'Bungee'; font-size: 1.5rem; background: #28a745; color: white; border: none; cursor: pointer; border-radius: 10px; box-shadow: 0 5px 0 #1e7e34; margin-bottom: 30px; }
-      #start-btn:active { transform: translateY(4px); box-shadow: none; }
+      .container { max-width: 1100px; margin: 20px auto; padding: 20px; }
+      h1 { font-family: 'Bungee'; font-size: 3.5rem; margin-bottom: 10px; color: #fff; text-shadow: 0 0 20px rgba(255,255,255,0.2); }
+      
+      #countdown { 
+        display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        font-family: 'Bungee'; font-size: 15rem; z-index: 100; color: #fff; text-shadow: 0 0 30px #ff0000;
+      }
 
-      .track { background: #222; border-radius: 25px; padding: 40px 20px; position: relative; border: 5px solid #333; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
-      .lane { height: 100px; border-bottom: 2px dashed #444; position: relative; display: flex; align-items: center; }
+      #start-btn { 
+        padding: 25px 60px; font-family: 'Bungee'; font-size: 2.2rem; background: #e10600; 
+        color: white; border: none; cursor: pointer; border-radius: 5px; box-shadow: 0 8px 0 #8b0000; margin-bottom: 30px; 
+        transition: 0.1s;
+      }
+      #start-btn:hover { background: #ff0700; transform: scale(1.05); }
+
+      .track { background: #111; border-radius: 10px; padding: 50px 20px; border: 10px solid #222; position: relative; box-shadow: inset 0 0 50px #000; }
+      .lane { height: 110px; border-bottom: 3px dashed #333; position: relative; display: flex; align-items: center; }
       .lane:last-child { border-bottom: none; }
       
-      .house-label { width: 140px; text-align: left; font-size: 1.6rem; font-weight: bold; }
-      .car { position: absolute; left: 140px; font-size: 55px; transition: left 4s cubic-bezier(0.45, 0.05, 0.55, 0.95); display: flex; flex-direction: column; align-items: center; }
-      .car span { transform: scaleX(-1); display: inline-block; } /* Flip car to move right */
+      .house-label { width: 160px; text-align: left; font-size: 2rem; font-weight: bold; font-family: 'Bungee'; font-style: italic; }
       
-      .bubble { background: #fff; color: #000; font-size: 14px; padding: 2px 8px; border-radius: 5px; margin-top: 5px; display: none; font-family: sans-serif; }
+      @keyframes rumble {
+        0% { transform: translate(2px, 2px) scaleX(-1); }
+        50% { transform: translate(-2px, -2px) scaleX(-1); }
+        100% { transform: translate(2px, -2px) scaleX(-1); }
+      }
+      .revving span { animation: rumble 0.05s infinite; }
 
-      .scale { display: flex; justify-content: space-between; margin-left: 140px; margin-top: 20px; border-top: 5px solid #fff; padding-top: 10px; color: #888; font-weight: bold; font-size: 1.1rem; }
+      .car { position: absolute; left: 160px; font-size: 70px; transition: left 3.5s cubic-bezier(0.45, 0.05, 0.55, 0.95); display: flex; flex-direction: column; align-items: center; z-index: 50; }
+      .car span { transform: scaleX(-1); display: inline-block; }
+      
+      .bubble { background: #e10600; color: #fff; font-size: 20px; padding: 4px 15px; border-radius: 4px; margin-top: 5px; display: none; font-weight: bold; font-family: 'Bungee'; }
+
+      .scale { display: flex; justify-content: space-between; margin-left: 160px; margin-top: 25px; border-top: 8px solid #fff; padding-top: 10px; color: #666; font-size: 1.4rem; font-family: 'Bungee'; }
     </style>
   </head>
   <body>
+    <div id="countdown">3</div>
+    
+    <audio id="snd-rev" src="https://assets.mixkit.co/active_storage/sfx/1569/1569-preview.mp3" loop></audio>
+    <audio id="snd-beep" src="https://assets.mixkit.co/active_storage/sfx/2655/2655-preview.mp3"></audio>
+    <audio id="snd-go" src="https://assets.mixkit.co/active_storage/sfx/991/991-preview.mp3"></audio>
+
     <nav>
       <a href="?view=WholeSchool" class="nav-btn ${view==='WholeSchool'?'active':''}">Whole School</a>
       <a href="?view=Y3" class="nav-btn ${view==='Y3'?'active':''}">Year 3</a>
       <a href="?view=Y4" class="nav-btn ${view==='Y4'?'active':''}">Year 4</a>
       <a href="?view=Y5" class="nav-btn ${view==='Y5'?'active':''}">Year 5</a>
       <a href="?view=Y6" class="nav-btn ${view==='Y6'?'active':''}">Year 6</a>
-      <a href="/admin" class="nav-btn staff-btn">Staff Login</a>
+      <a href="/admin" class="nav-btn" style="opacity:0.2">Admin</a>
     </nav>
 
     <div class="container">
-      <h1>${title} Community Stars</h1>
-      <button id="start-btn" onclick="runRace()">START RACE!</button>
+      <h1>${title} GRAND PRIX</h1>
+      <button id="start-btn" onclick="startSequence()">START ENGINES</button>
       
       <div class="track">
-        <div class="lane"><div class="house-label" style="color:#ffd700">Lewes</div><div id="cy" class="car"><span>🏎️</span><div id="vy" class="bubble">${scores.y}</div></div></div>
-        <div class="lane"><div class="house-label" style="color:#ff4136">Amberley</div><div id="cr" class="car" style="filter: hue-rotate(140deg);"><span>🏎️</span><div id="vr" class="bubble">${scores.r}</div></div></div>
-        <div class="lane"><div class="house-label" style="color:#0074d9">Hastings</div><div id="cb" class="car" style="filter: hue-rotate(210deg);"><span>🏎️</span><div id="vb" class="bubble">${scores.b}</div></div></div>
-        <div class="lane"><div class="house-label" style="color:#2ecc40">Bramber</div><div id="cg" class="car" style="filter: hue-rotate(280deg);"><span>🏎️</span><div id="vg" class="bubble">${scores.g}</div></div></div>
-        
-        <div class="scale">
-          <span>0</span><span>1000</span><span>2000</span><span>3000</span><span>4000</span><span>5000</span>
-        </div>
+        <div class="lane"><div class="house-label" style="color:#ffd700">LEWES</div><div id="cy" class="car"><span>🏎️</span><div id="vy" class="bubble">${scores.y}</div></div></div>
+        <div class="lane"><div class="house-label" style="color:#ff4136">AMBERLEY</div><div id="cr" class="car" style="filter: hue-rotate(140deg);"><span>🏎️</span><div id="vr" class="bubble">${scores.r}</div></div></div>
+        <div class="lane"><div class="house-label" style="color:#0074d9">HASTINGS</div><div id="cb" class="car" style="filter: hue-rotate(210deg);"><span>🏎️</span><div id="vb" class="bubble">${scores.b}</div></div></div>
+        <div class="lane"><div class="house-label" style="color:#2ecc40">BRAMBER</div><div id="cg" class="car" style="filter: hue-rotate(280deg);"><span>🏎️</span><div id="vg" class="bubble">${scores.g}</div></div></div>
+        <div class="scale"><span>0</span><span>1000</span><span>2000</span><span>3000</span><span>4000</span><span>5000</span></div>
       </div>
     </div>
 
     <script>
-      function runRace() {
-        document.getElementById('start-btn').style.display = 'none';
-        const move = (id, vId, val) => {
-          // Calculate move (cap at 85% of track width)
-          const p = Math.min((val / 5000) * 85, 88);
-          document.getElementById(id).style.left = "calc(140px + " + p + "%)";
-          
-          // Reveal score after car stops
-          setTimeout(() => {
-            document.getElementById(vId).style.display = 'block';
-          }, 3900);
-        };
+      const sndRev = document.getElementById('snd-rev');
+      const sndBeep = document.getElementById('snd-beep');
+      const sndGo = document.getElementById('snd-go');
+
+      function startSequence() {
+        const btn = document.getElementById('start-btn');
+        const countDiv = document.getElementById('countdown');
+        const cars = document.querySelectorAll('.car');
         
-        // Start cars with a tiny staggered delay for effect
-        setTimeout(() => move('cy','vy', ${scores.y}), 0);
-        setTimeout(() => move('cr','vr', ${scores.r}), 200);
-        setTimeout(() => move('cb','vb', ${scores.b}), 400);
-        setTimeout(() => move('cg','vg', ${scores.g}), 600);
+        btn.style.display = 'none';
+        
+        // Start rumble sound
+        sndRev.play();
+        cars.forEach(c => c.classList.add('revving'));
+
+        countDiv.style.display = 'block';
+        let count = 3;
+        sndBeep.play(); // First beep
+
+        const timer = setInterval(() => {
+          count--;
+          if (count > 0) {
+            countDiv.innerText = count;
+            sndBeep.currentTime = 0;
+            sndBeep.play();
+          } else if (count === 0) {
+            countDiv.innerText = "GO!";
+            countDiv.style.color = "#00ff00";
+            countDiv.style.textShadow = "0 0 40px #00ff00";
+            
+            clearInterval(timer);
+            sndRev.pause();
+            sndGo.play(); // F1 Zoom Sound!
+            
+            cars.forEach(c => c.classList.remove('revving'));
+            runRace();
+            
+            setTimeout(() => { countDiv.style.display = 'none'; }, 1000);
+          }
+        }, 1000);
+      }
+
+      function runRace() {
+        const move = (id, vId, val) => {
+          const p = Math.min((val / 5000) * 82, 85);
+          document.getElementById(id).style.left = "calc(160px + " + p + "%)";
+          setTimeout(() => { document.getElementById(vId).style.display = 'block'; }, 3600);
+        };
+        move('cy','vy', ${scores.y}); move('cr','vr', ${scores.r});
+        move('cb','vb', ${scores.b}); move('cg','vg', ${scores.g});
       }
     </script>
   </body>
@@ -140,33 +183,5 @@ function renderRace(view, starData) {
 
 function renderAdmin(data) {
   const years = ['WholeSchool', 'Y3', 'Y4', 'Y5', 'Y6'];
-  return `
-  <!DOCTYPE html>
-  <html>
-  <head><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-  <body style="font-family:sans-serif; padding:30px; background:#f4f4f4;">
-    <div style="max-width:600px; margin:auto; background:white; padding:30px; border-radius:15px; box-shadow:0 5px 15px rgba(0,0,0,0.1);">
-      <h2 style="margin-top:0">Staff Star Portal</h2>
-      <form method="POST">
-        <div style="background:#eee; padding:15px; border-radius:8px; margin-bottom:20px;">
-          <strong>Admin Login</strong><br>
-          User: <input type="text" name="user" required> 
-          Pass: <input type="password" name="pass" required>
-        </div>
-        <hr>
-        ${years.map(y => `
-          <div style="margin-bottom:20px; border-bottom:1px solid #eee; padding-bottom:10px;">
-            <h3 style="margin-bottom:5px;">${y} Totals</h3>
-            L: <input type="number" name="${y}_y" value="${data[y].y}" style="width:60px"> 
-            A: <input type="number" name="${y}_r" value="${data[y].r}" style="width:60px"> 
-            H: <input type="number" name="${y}_b" value="${data[y].b}" style="width:60px"> 
-            B: <input type="number" name="${y}_g" value="${data[y].g}" style="width:60px">
-          </div>
-        `).join('')}
-        <button type="submit" style="width:100%; padding:20px; background:#28a745; color:white; border:none; border-radius:10px; font-weight:bold; font-size:1.1rem; cursor:pointer;">UPDATE RACE TRACKS</button>
-      </form>
-      <p><a href="/">Cancel & Back to Race</a></p>
-    </div>
-  </body>
-  </html>`;
+  return `<!DOCTYPE html><html><body style="font-family:sans-serif; padding:30px;"><h2>Staff Admin</h2><form method="POST">User: <input type="text" name="user"> Pass: <input type="password" name="pass"><hr>${years.map(y => `<h3>${y}</h3>L: <input type="number" name="${y}_y" value="${data[y].y}"> A: <input type="number" name="${y}_r" value="${data[y].r}"> H: <input type="number" name="${y}_b" value="${data[y].b}"> B: <input type="number" name="${y}_g" value="${data[y].g}"><br>`).join('')}<br><button type="submit">SAVE TO CLOUDFLARE</button></form></body></html>`;
 }
