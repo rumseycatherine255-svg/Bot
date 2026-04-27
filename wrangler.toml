@@ -4,4 +4,5 @@ compatibility_date = "2024-01-01"
 
 [[kv_namespaces]]
 binding = "STARS_DB"
-id = "stars_storage" # You will create this in the dashboard or via 'wrangler kv:namespace create STARS_DB'
+id = "fddbb7f07e014be78d67d3406286ceb6
+" # You will create this in the dashboard or via 'wrangler kv:namespace create STARS_DB'
