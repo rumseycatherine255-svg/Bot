@@ -60,7 +60,7 @@ function renderRace(view, starData) {
       .active { background: #e10600; color: white; }
       
       .container { max-width: 1100px; margin: 20px auto; padding: 20px; }
-      h1 { font-family: 'Bungee'; font-size: 3.5rem; margin-bottom: 10px; color: #fff; }
+      h1 { font-family: 'Bungee'; font-size: 3.5rem; margin-bottom: 10px; color: #fff; text-shadow: 0 0 20px rgba(255,0,0,0.4); }
       
       #countdown { 
         display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -81,7 +81,6 @@ function renderRace(view, starData) {
       .car { position: absolute; left: 160px; font-size: 70px; transition: left 3.5s cubic-bezier(0.45, 0.05, 0.55, 0.95); display: flex; flex-direction: column; align-items: center; z-index: 50; }
       .car span { transform: scaleX(-1); display: inline-block; }
       
-      /* COLORS */
       .car-yellow { filter: hue-rotate(50deg) brightness(1.2); }
       .car-red { filter: none; }
       .car-blue { filter: hue-rotate(220deg); }
@@ -95,7 +94,7 @@ function renderRace(view, starData) {
   <body>
     <div id="countdown">3</div>
     
-    <audio id="snd-go" src="https://assets.mixkit.co/active_storage/sfx/991/991-preview.mp3"></audio>
+    <audio id="snd-drum" src="https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3"></audio>
 
     <nav>
       <a href="?view=WholeSchool" class="nav-btn ${view==='WholeSchool'?'active':''}">Whole School</a>
@@ -120,24 +119,34 @@ function renderRace(view, starData) {
     </div>
 
     <script>
-      const sndGo = document.getElementById('snd-go');
+      const drum = document.getElementById('snd-drum');
 
       function startSequence() {
         const btn = document.getElementById('start-btn');
         const countDiv = document.getElementById('countdown');
         btn.style.display = 'none';
         countDiv.style.display = 'block';
+        
         let count = 3;
+        
+        // Initial "Budun" for 3
+        drum.currentTime = 0;
+        drum.play();
 
         const timer = setInterval(() => {
           count--;
           if (count > 0) {
             countDiv.innerText = count;
+            drum.currentTime = 0;
+            drum.play(); // "Budun" for 2 and 1
           } else if (count === 0) {
             countDiv.innerText = "GO!";
             countDiv.style.color = "#00ff00";
+            
+            drum.currentTime = 0;
+            drum.play(); // Final "Budun" for GO!
+            
             clearInterval(timer);
-            sndGo.play(); // Zoom sound on GO
             runRace();
             setTimeout(() => { countDiv.style.display = 'none'; }, 1000);
           }
