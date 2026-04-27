@@ -1,0 +1,7 @@
+name = "tab-junior-f1-stars"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+[[kv_namespaces]]
+binding = "STARS_DB"
+id = "stars_storage" # You will create this in the dashboard or via 'wrangler kv:namespace create STARS_DB'
