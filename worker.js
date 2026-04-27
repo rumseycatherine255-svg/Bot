@@ -56,23 +56,24 @@ function renderRace(view, starData) {
     <style>
       body { background: #0a0a0a; font-family: 'Oswald', sans-serif; margin: 0; text-align: center; color: white; overflow-x: hidden; }
       nav { background: #000; padding: 15px; display: flex; justify-content: center; gap: 10px; border-bottom: 2px solid #333; }
-      .nav-btn { color: #888; text-decoration: none; padding: 8px 15px; background: #222; border-radius: 5px; font-weight: bold; }
-      .active { background: #e74c3c; color: white; }
+      .nav-btn { color: #888; text-decoration: none; padding: 8px 15px; background: #222; border-radius: 5px; font-weight: bold; transition: 0.2s; }
+      .nav-btn:hover { color: white; background: #444; }
+      .active { background: #e10600; color: white; }
       
       .container { max-width: 1100px; margin: 20px auto; padding: 20px; }
-      h1 { font-family: 'Bungee'; font-size: 3.5rem; margin-bottom: 10px; color: #fff; text-shadow: 0 0 20px rgba(255,255,255,0.2); }
+      h1 { font-family: 'Bungee'; font-size: 3.5rem; margin-bottom: 10px; color: #fff; text-transform: uppercase; letter-spacing: 2px; }
       
       #countdown { 
         display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        font-family: 'Bungee'; font-size: 15rem; z-index: 100; color: #fff; text-shadow: 0 0 30px #ff0000;
+        font-family: 'Bungee'; font-size: 18rem; z-index: 100; color: #fff; text-shadow: 0 0 50px #e10600;
       }
 
       #start-btn { 
-        padding: 25px 60px; font-family: 'Bungee'; font-size: 2.2rem; background: #e10600; 
-        color: white; border: none; cursor: pointer; border-radius: 5px; box-shadow: 0 8px 0 #8b0000; margin-bottom: 30px; 
+        padding: 25px 60px; font-family: 'Bungee'; font-size: 2.2rem; background: #28a745; 
+        color: white; border: none; cursor: pointer; border-radius: 5px; box-shadow: 0 8px 0 #1e7e34; margin-bottom: 30px; 
         transition: 0.1s;
       }
-      #start-btn:hover { background: #ff0700; transform: scale(1.05); }
+      #start-btn:hover { transform: scale(1.05); background: #218838; }
 
       .track { background: #111; border-radius: 10px; padding: 50px 20px; border: 10px solid #222; position: relative; box-shadow: inset 0 0 50px #000; }
       .lane { height: 110px; border-bottom: 3px dashed #333; position: relative; display: flex; align-items: center; }
@@ -80,17 +81,10 @@ function renderRace(view, starData) {
       
       .house-label { width: 160px; text-align: left; font-size: 2rem; font-weight: bold; font-family: 'Bungee'; font-style: italic; }
       
-      @keyframes rumble {
-        0% { transform: translate(2px, 2px) scaleX(-1); }
-        50% { transform: translate(-2px, -2px) scaleX(-1); }
-        100% { transform: translate(2px, -2px) scaleX(-1); }
-      }
-      .revving span { animation: rumble 0.05s infinite; }
-
       .car { position: absolute; left: 160px; font-size: 70px; transition: left 3.5s cubic-bezier(0.45, 0.05, 0.55, 0.95); display: flex; flex-direction: column; align-items: center; z-index: 50; }
       .car span { transform: scaleX(-1); display: inline-block; }
       
-      .bubble { background: #e10600; color: #fff; font-size: 20px; padding: 4px 15px; border-radius: 4px; margin-top: 5px; display: none; font-weight: bold; font-family: 'Bungee'; }
+      .bubble { background: #e10600; color: #fff; font-size: 20px; padding: 4px 15px; border-radius: 4px; margin-top: 5px; display: none; font-weight: bold; font-family: 'Bungee'; border: 2px solid white; }
 
       .scale { display: flex; justify-content: space-between; margin-left: 160px; margin-top: 25px; border-top: 8px solid #fff; padding-top: 10px; color: #666; font-size: 1.4rem; font-family: 'Bungee'; }
     </style>
@@ -98,7 +92,6 @@ function renderRace(view, starData) {
   <body>
     <div id="countdown">3</div>
     
-    <audio id="snd-rev" src="https://assets.mixkit.co/active_storage/sfx/1569/1569-preview.mp3" loop></audio>
     <audio id="snd-beep" src="https://assets.mixkit.co/active_storage/sfx/2655/2655-preview.mp3"></audio>
     <audio id="snd-go" src="https://assets.mixkit.co/active_storage/sfx/991/991-preview.mp3"></audio>
 
@@ -108,12 +101,12 @@ function renderRace(view, starData) {
       <a href="?view=Y4" class="nav-btn ${view==='Y4'?'active':''}">Year 4</a>
       <a href="?view=Y5" class="nav-btn ${view==='Y5'?'active':''}">Year 5</a>
       <a href="?view=Y6" class="nav-btn ${view==='Y6'?'active':''}">Year 6</a>
-      <a href="/admin" class="nav-btn" style="opacity:0.2">Admin</a>
+      <a href="/admin" class="nav-btn" style="opacity:0.2">Staff Admin</a>
     </nav>
 
     <div class="container">
-      <h1>${title} GRAND PRIX</h1>
-      <button id="start-btn" onclick="startSequence()">START ENGINES</button>
+      <h1>${title} GP</h1>
+      <button id="start-btn" onclick="startSequence()">READY...</button>
       
       <div class="track">
         <div class="lane"><div class="house-label" style="color:#ffd700">LEWES</div><div id="cy" class="car"><span>🏎️</span><div id="vy" class="bubble">${scores.y}</div></div></div>
@@ -125,7 +118,6 @@ function renderRace(view, starData) {
     </div>
 
     <script>
-      const sndRev = document.getElementById('snd-rev');
       const sndBeep = document.getElementById('snd-beep');
       const sndGo = document.getElementById('snd-go');
 
@@ -135,31 +127,25 @@ function renderRace(view, starData) {
         const cars = document.querySelectorAll('.car');
         
         btn.style.display = 'none';
-        
-        // Start rumble sound
-        sndRev.play();
-        cars.forEach(c => c.classList.add('revving'));
 
         countDiv.style.display = 'block';
         let count = 3;
-        sndBeep.play(); // First beep
+        sndBeep.play(); // Beep 3
 
         const timer = setInterval(() => {
           count--;
           if (count > 0) {
             countDiv.innerText = count;
             sndBeep.currentTime = 0;
-            sndBeep.play();
+            sndBeep.play(); // Beep 2 then 1
           } else if (count === 0) {
             countDiv.innerText = "GO!";
             countDiv.style.color = "#00ff00";
-            countDiv.style.textShadow = "0 0 40px #00ff00";
+            countDiv.style.textShadow = "0 0 50px #00ff00";
             
             clearInterval(timer);
-            sndRev.pause();
-            sndGo.play(); // F1 Zoom Sound!
+            sndGo.play(); // The Launch Sound
             
-            cars.forEach(c => c.classList.remove('revving'));
             runRace();
             
             setTimeout(() => { countDiv.style.display = 'none'; }, 1000);
