@@ -1,193 +1,202 @@
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    let scores = await env.STARS_DB.get("totals", { type: "json" }) || {
+      Y3: { Yellow: 0, Red: 0, Blue: 0, Green: 0 },
+      Y4: { Yellow: 0, Red: 0, Blue: 0, Green: 0 },
+      Y5: { Yellow: 0, Red: 0, Blue: 0, Green: 0 },
+      Y6: { Yellow: 0, Red: 0, Blue: 0, Green: 0 }
+    };
 
-    // 1. DATABASE SYNC: Get current totals from Cloudflare KV
-    let scores = await env.STARS_DB.get("totals", { type: "json" });
-    if (!scores) {
-      scores = { Yellow: 0, Red: 0, Blue: 0, Green: 0 };
-    }
-
-    // 2. ROUTE: Admin Login/Update Page
     if (url.pathname === "/admin") {
       if (request.method === "POST") {
         const formData = await request.formData();
-        const user = formData.get("user");
-        const pass = formData.get("pass");
-
-        if (user === "admin" && pass === "cmstars") {
+        if (formData.get("user") === "admin" && formData.get("pass") === "cmstars") {
           const newScores = {
-            Yellow: parseInt(formData.get("Yellow") || 0),
-            Red: parseInt(formData.get("Red") || 0),
-            Blue: parseInt(formData.get("Blue") || 0),
-            Green: parseInt(formData.get("Green") || 0)
+            Y3: { Yellow: formData.get("Y3_Y"), Red: formData.get("Y3_R"), Blue: formData.get("Y3_B"), Green: formData.get("Y3_G") },
+            Y4: { Yellow: formData.get("Y4_Y"), Red: formData.get("Y4_R"), Blue: formData.get("Y4_B"), Green: formData.get("Y4_G") },
+            Y5: { Yellow: formData.get("Y5_Y"), Red: formData.get("Y5_R"), Blue: formData.get("Y5_B"), Green: formData.get("Y5_G") },
+            Y6: { Yellow: formData.get("Y6_Y"), Red: formData.get("Y6_R"), Blue: formData.get("Y6_B"), Green: formData.get("Y6_G") }
           };
           await env.STARS_DB.put("totals", JSON.stringify(newScores));
-          return new Response("Success! <a href='/'>Click here to see the race!</a>", { 
-            headers: { "Content-Type": "text/html" } 
-          });
+          return new Response("Race Data Updated! <a href='/'>Go to Race</a>", { headers: { "Content-Type": "text/html" } });
         }
-        return new Response("Unauthorized. Check username/password.", { status: 403 });
+        return new Response("Access Denied", { status: 403 });
       }
-      return new Response(renderAdminPage(scores), { headers: { "Content-Type": "text/html" } });
+      return new Response(renderAdmin(scores), { headers: { "Content-Type": "text/html" } });
     }
 
-    // 3. ROUTE: Main Racing Track
-    return new Response(renderMainTrack(scores), { headers: { "Content-Type": "text/html" } });
+    return new Response(renderRace(scores), { headers: { "Content-Type": "text/html" } });
   }
 };
 
-// --- HTML GENERATION FUNCTIONS ---
-
-function renderMainTrack(scores) {
-  // Goal is 1000 stars to reach the finish line
-  const goal = 1000;
-  const calcPos = (val) => Math.min((val / goal) * 85, 88); 
-
-  return `
-  <!DOCTYPE html>
-  <html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TAB Junior F1 Star Race</title>
-    <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Oswald:wght@700&display=swap" rel="stylesheet">
-    <style>
-      :root {
-        --lewes: #FFD700; --amberley: #FF4136; --hastings: #0074D9; --bramber: #2ECC40;
-      }
-      body { 
-        background: #1a1a1a; color: white; font-family: 'Oswald', sans-serif; 
-        margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center;
-      }
-      h1 { font-family: 'Bungee', cursive; font-size: 2.5rem; color: #fff; text-shadow: 4px 4px #e74c3c; margin-bottom: 10px; text-align:center; }
-      
-      .track-area { 
-        width: 95%; max-width: 1000px; background: #333; border: 8px solid #444; 
-        border-radius: 20px; position: relative; padding: 20px 0; margin-top: 20px;
-        box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-      }
-      
-      .finish-line { 
-        position: absolute; right: 40px; top: 0; bottom: 0; width: 30px; 
-        background: repeating-conic-gradient(#fff 0% 25%, #000 0% 50%) 50% / 20px 20px;
-        border-left: 2px solid #fff; border-right: 2px solid #fff; z-index: 1;
-      }
-
-      .lane { 
-        height: 100px; border-bottom: 2px dashed #555; position: relative; 
-        display: flex; align-items: center; z-index: 2;
-      }
-      .lane:last-child { border-bottom: none; }
-      
-      .house-name { 
-        width: 120px; padding-left: 20px; font-size: 1.4rem; letter-spacing: 1px;
-        text-transform: uppercase; text-shadow: 2px 2px #000;
-      }
-
-      .car-container {
-        position: absolute; height: 60px; transition: left 2.5s cubic-bezier(0.45, 0.05, 0.55, 0.95);
-        display: flex; flex-direction: column; align-items: center;
-      }
-      
-      .f1-car { font-size: 50px; line-height: 1; filter: drop-shadow(2px 4px 6px black); }
-      .score-tag { 
-        background: #fff; color: #000; padding: 2px 10px; border-radius: 5px; 
-        font-size: 1rem; font-weight: 900; margin-top: -5px; border: 2px solid #000;
-      }
-
-      .footer { margin-top: 30px; color: #666; font-size: 0.9rem; text-decoration: none; }
-    </style>
-  </head>
-  <body>
-    <h1>COMMUNITY STAR TOTALS</h1>
-    
-    <div class="track-area">
-      <div class="finish-line"></div>
-      
-      <div class="lane">
-        <div class="house-name" style="color: var(--lewes)">Lewes</div>
-        <div class="car-container" style="left: ${calcPos(scores.Yellow)}%">
-          <div class="f1-car">🏎️</div>
-          <div class="score-tag">${scores.Yellow}</div>
-        </div>
-      </div>
-
-      <div class="lane">
-        <div class="house-name" style="color: var(--amberley)">Amberley</div>
-        <div class="car-container" style="left: ${calcPos(scores.Red)}%">
-          <div class="f1-car" style="filter: hue-rotate(140deg);">🏎️</div>
-          <div class="score-tag">${scores.Red}</div>
-        </div>
-      </div>
-
-      <div class="lane">
-        <div class="house-name" style="color: var(--hastings)">Hastings</div>
-        <div class="car-container" style="left: ${calcPos(scores.Blue)}%">
-          <div class="f1-car" style="filter: hue-rotate(210deg);">🏎️</div>
-          <div class="score-tag">${scores.Blue}</div>
-        </div>
-      </div>
-
-      <div class="lane">
-        <div class="house-name" style="color: var(--bramber)">Bramber</div>
-        <div class="car-container" style="left: ${calcPos(scores.Green)}%">
-          <div class="f1-car" style="filter: hue-rotate(280deg);">🏎️</div>
-          <div class="score-tag">${scores.Green}</div>
-        </div>
-      </div>
-    </div>
-
-    <a href="/admin" class="footer">Staff Login</a>
-  </body>
-  </html>`;
-}
-
-function renderAdminPage(scores) {
+function renderRace(data) {
   return `
   <!DOCTYPE html>
   <html>
   <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - Update Stars</title>
+    <meta charset="UTF-8">
+    <title>TAB Junior Grand Prix</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Oswald:wght@700&display=swap" rel="stylesheet">
     <style>
-      body { font-family: sans-serif; background: #f0f0f0; display: flex; justify-content: center; padding-top: 50px; }
-      .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
-      input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 1rem; }
-      button { width: 100%; padding: 15px; background: #0074D9; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 1.1rem; font-weight: bold; }
-      label { font-weight: bold; font-size: 0.9rem; color: #555; }
-      .house-row { margin-bottom: 15px; }
+      body { background: #111; color: white; font-family: 'Oswald', sans-serif; margin: 0; overflow-x: hidden; text-align: center; }
+      .stadium { padding: 20px; }
+      h1 { font-family: 'Bungee'; color: #FF3E3E; font-size: 3rem; margin: 10px; text-shadow: 3px 3px 0px #fff; }
+      
+      .race-controls { margin: 20px; }
+      #startBtn { padding: 15px 40px; font-family: 'Bungee'; font-size: 1.5rem; background: #28a745; color: white; border: none; cursor: pointer; border-radius: 10px; box-shadow: 0 5px 0 #1e7e34; }
+      #startBtn:active { transform: translateY(4px); box-shadow: none; }
+
+      .countdown-overlay { 
+        position: fixed; top:0; left:0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); 
+        display: none; justify-content: center; align-items: center; z-index: 100; font-family: 'Bungee'; font-size: 10rem; 
+      }
+
+      .year-container { background: #222; border: 4px solid #444; border-radius: 15px; margin: 20px auto; width: 90%; max-width: 1000px; padding: 10px; position: relative; }
+      .year-title { font-family: 'Bungee'; color: #aaa; text-align: left; padding-left: 20px; font-size: 1.5rem; }
+      
+      .track { position: relative; height: 240px; background: #333; border-radius: 10px; margin-top: 10px; border-right: 20px double #fff; }
+      .lane { height: 60px; border-bottom: 1px dashed #555; position: relative; display: flex; align-items: center; }
+      
+      .car { 
+        position: absolute; left: 0%; font-size: 40px; transition: left 4s cubic-bezier(0.45, 0, 0.55, 1); 
+        display: flex; align-items: center; filter: drop-shadow(2px 2px 2px black);
+      }
+      .car-label { font-size: 12px; background: white; color: black; padding: 2px 5px; border-radius: 4px; margin-left: 5px; font-family: sans-serif; display: none; }
+
+      .results-overlay { 
+        position: fixed; top:0; left:0; width: 100%; height:100%; background: rgba(0,0,0,0.9); 
+        display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 200; 
+      }
+      .winner-card { font-family: 'Bungee'; font-size: 3rem; color: gold; margin: 10px; animation: pop 0.5s ease-out; }
+      @keyframes pop { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
     </style>
   </head>
   <body>
-    <div class="card">
-      <h2 style="margin-top:0">Update Star Totals</h2>
-      <form method="POST">
-        <label>Login Credentials</label>
-        <input type="text" name="user" placeholder="Username" required>
-        <input type="password" name="pass" placeholder="Password" required>
-        <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
-        
-        <div class="house-row">
-          <label style="color:#d4af37">Lewes (Yellow)</label>
-          <input type="number" name="Yellow" value="${scores.Yellow}">
-        </div>
-        <div class="house-row">
-          <label style="color:#FF4136">Amberley (Red)</label>
-          <input type="number" name="Red" value="${scores.Red}">
-        </div>
-        <div class="house-row">
-          <label style="color:#0074D9">Hastings (Blue)</label>
-          <input type="number" name="Blue" value="${scores.Blue}">
-        </div>
-        <div class="house-row">
-          <label style="color:#2ECC40">Bramber (Green)</label>
-          <input type="number" name="Green" value="${scores.Green}">
-        </div>
-        
-        <button type="submit">Update Track</button>
-      </form>
+    <div class="countdown-overlay" id="countdown">3</div>
+    
+    <div class="results-overlay" id="results">
+      <h1 style="color:white">RACE RESULTS</h1>
+      <div id="winnerList"></div>
+      <button onclick="location.reload()" style="padding:10px 20px; margin-top:20px;">RESET TRACK</button>
     </div>
+
+    <div class="stadium">
+      <h1>TAB JUNIOR GRAND PRIX</h1>
+      <div class="race-controls">
+        <button id="startBtn" onclick="startRace()">START ENGINES!</button>
+      </div>
+
+      ${['Y3', 'Y4', 'Y5', 'Y6'].map(year => `
+        <div class="year-container">
+          <div class="year-title">YEAR ${year.slice(1)}</div>
+          <div class="track">
+            <div class="lane"><div id="${year}-Y" class="car" style="left: 0">🏎️<span class="car-label">Lewes</span></div></div>
+            <div class="lane"><div id="${year}-R" class="car" style="left: 0; filter: hue-rotate(140deg);">🏎️<span class="car-label">Amberley</span></div></div>
+            <div class="lane"><div id="${year}-B" class="car" style="left: 0; filter: hue-rotate(210deg);">🏎️<span class="car-label">Hastings</span></div></div>
+            <div class="lane"><div id="${year}-G" class="car" style="left: 0; filter: hue-rotate(280deg);">🏎️<span class="car-label">Bramber</span></div></div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+
+    <script>
+      const scoreData = ${JSON.stringify(data)};
+      const goal = 1000;
+
+      function startRace() {
+        document.getElementById('startBtn').style.display = 'none';
+        const cd = document.getElementById('countdown');
+        cd.style.display = 'flex';
+        
+        // Sound effects using Web Audio (Basic engine rev/beep)
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        let count = 3;
+        const timer = setInterval(() => {
+          count--;
+          if (count > 0) {
+            cd.innerText = count;
+            beep(ctx, 440);
+          } else if (count === 0) {
+            cd.innerText = "GO!";
+            cd.style.color = "#28a745";
+            beep(ctx, 880);
+          } else {
+            clearInterval(timer);
+            cd.style.display = 'none';
+            beginMovement();
+          }
+        }, 1000);
+      }
+
+      function beep(ctx, freq) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = freq;
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.5);
+        osc.start(); osc.stop(ctx.currentTime + 0.5);
+      }
+
+      function beginMovement() {
+        // Move every car
+        for (let year in scoreData) {
+          const houses = scoreData[year];
+          moveCar(year + '-Y', houses.Yellow);
+          moveCar(year + '-R', houses.Red);
+          moveCar(year + '-B', houses.Blue);
+          moveCar(year + '-G', houses.Green);
+        }
+
+        // Show results after animation (4 seconds)
+        setTimeout(revealResults, 4500);
+      }
+
+      function moveCar(id, score) {
+        const percent = Math.min((score / goal) * 90, 92);
+        document.getElementById(id).style.left = percent + '%';
+      }
+
+      function revealResults() {
+        const res = document.getElementById('results');
+        const list = document.getElementById('winnerList');
+        res.style.display = 'flex';
+        
+        let html = '';
+        for (let year in scoreData) {
+          const s = scoreData[year];
+          const sorted = [
+            {n: 'Lewes', v: s.Yellow, c: '#FFD700'},
+            {n: 'Amberley', v: s.Red, c: '#FF4136'},
+            {n: 'Hastings', v: s.Blue, c: '#0074D9'},
+            {n: 'Bramber', v: s.Green, c: '#2ECC40'}
+          ].sort((a,b) => b.v - a.v);
+
+          html += '<div style="margin-bottom:20px"><h2 style="margin:0">YEAR ' + year.slice(1) + '</h2>';
+          html += '<div class="winner-card" style="color:'+sorted[0].c+'">1st: ' + sorted[0].n + ' ('+sorted[0].v+')</div></div>';
+        }
+        list.innerHTML = html;
+      }
+    </script>
   </body>
   </html>`;
+}
+
+function renderAdmin(scores) {
+  return `<!DOCTYPE html><html><body style="font-family:sans-serif; padding:20px;">
+    <h2>Race Admin Panel</h2>
+    <form method="POST">
+      Username: <input type="text" name="user"><br>
+      Password: <input type="password" name="pass"><br><br>
+      ${['Y3', 'Y4', 'Y5', 'Y6'].map(y => `
+        <h3>Year ${y.slice(1)}</h3>
+        Lewes: <input type="number" name="${y}_Y" value="${scores[y].Yellow}"> 
+        Amberley: <input type="number" name="${y}_R" value="${scores[y].Red}"> 
+        Hastings: <input type="number" name="${y}_B" value="${scores[y].Blue}"> 
+        Green: <input type="number" name="${y}_G" value="${scores[y].Green}"><br>
+      `).join('')}
+      <br><button type="submit">Update Scores & Reset Race</button>
+    </form>
+  </body></html>`;
 }
