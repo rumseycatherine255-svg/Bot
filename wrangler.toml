@@ -1,8 +1,11 @@
-name = "tabjunior"
+name = "tab-junior-f1-stars"
 main = "worker.js"
 compatibility_date = "2024-01-01"
 
+# This connects your code to the database where the star totals are saved
 [[kv_namespaces]]
 binding = "STARS_DB"
-id = "fddbb7f07e014be78d67d3406286ceb6
-" # You will create this in the dashboard or via 'wrangler kv:namespace create STARS_DB'
+id = "fddbb7f07e014be78d67d3406286ceb6"
+
+[vars]
+# You can add global variables here if needed in the future
