@@ -54,13 +54,13 @@ function renderRace(view, starData) {
     <title>TAB Community Stars</title>
     <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Oswald:wght@700&display=swap" rel="stylesheet">
     <style>
-      body { background: #0a0a0a; font-family: 'Oswald', sans-serif; margin: 0; text-align: center; color: white; overflow-x: hidden; }
+      body { background: #0a0a0a; font-family: 'Oswald', sans-serif; margin: 0; text-align: center; color: white; overflow-x: hidden; min-height: 100vh; display: flex; flex-direction: column; }
       nav { background: #000; padding: 15px; display: flex; justify-content: center; gap: 10px; border-bottom: 2px solid #333; }
       .nav-btn { color: #888; text-decoration: none; padding: 8px 15px; background: #222; border-radius: 5px; font-weight: bold; }
       .active { background: #e10600; color: white; }
       
-      .container { max-width: 1100px; margin: 20px auto; padding: 20px; }
-      h1 { font-family: 'Bungee'; font-size: 3.5rem; margin-bottom: 10px; color: #fff; text-shadow: 0 0 20px rgba(255,0,0,0.4); }
+      .container { max-width: 1100px; margin: 20px auto; padding: 20px; flex-grow: 1; }
+      h1 { font-family: 'Bungee'; font-size: 3rem; margin-bottom: 10px; color: #fff; text-shadow: 0 0 20px rgba(255,0,0,0.4); }
       
       #countdown { 
         display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -89,11 +89,12 @@ function renderRace(view, starData) {
       .bubble { background: #e10600; color: #fff; font-size: 20px; padding: 4px 15px; border-radius: 4px; margin-top: 5px; display: none; font-weight: bold; font-family: 'Bungee'; border: 2px solid white; }
 
       .scale { display: flex; justify-content: space-between; margin-left: 160px; margin-top: 25px; border-top: 8px solid #fff; padding-top: 10px; color: #666; font-size: 1.4rem; font-family: 'Bungee'; }
+      
+      footer { padding: 20px; color: white; font-size: 1rem; letter-spacing: 1px; }
     </style>
   </head>
   <body>
     <div id="countdown">3</div>
-    
     <audio id="snd-drum" src="https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3"></audio>
 
     <nav>
@@ -106,7 +107,7 @@ function renderRace(view, starData) {
     </nav>
 
     <div class="container">
-      <h1>${title} GP</h1>
+      <h1>${title} Community Stars</h1>
       <button id="start-btn" onclick="startSequence()">READY...</button>
       
       <div class="track">
@@ -118,6 +119,10 @@ function renderRace(view, starData) {
       </div>
     </div>
 
+    <footer>
+      Designed by Arthur Chapman - 6MC
+    </footer>
+
     <script>
       const drum = document.getElementById('snd-drum');
 
@@ -126,26 +131,18 @@ function renderRace(view, starData) {
         const countDiv = document.getElementById('countdown');
         btn.style.display = 'none';
         countDiv.style.display = 'block';
-        
         let count = 3;
-        
-        // Initial "Budun" for 3
-        drum.currentTime = 0;
-        drum.play();
+        drum.currentTime = 0; drum.play();
 
         const timer = setInterval(() => {
           count--;
           if (count > 0) {
             countDiv.innerText = count;
-            drum.currentTime = 0;
-            drum.play(); // "Budun" for 2 and 1
+            drum.currentTime = 0; drum.play();
           } else if (count === 0) {
             countDiv.innerText = "GO!";
             countDiv.style.color = "#00ff00";
-            
-            drum.currentTime = 0;
-            drum.play(); // Final "Budun" for GO!
-            
+            drum.currentTime = 0; drum.play();
             clearInterval(timer);
             runRace();
             setTimeout(() => { countDiv.style.display = 'none'; }, 1000);
