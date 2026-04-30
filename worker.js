@@ -467,7 +467,7 @@ function runRace() {
       const px   = startPx + (frac * usable);
       // Animate smoothly to this keyframe
       const carEl = document.getElementById('car-' + h.id);
-     carEl.style.transition = `left ${frameTime * 0.85}ms cubic-bezier(0.4, 0.0, 0.6, 1.0)`;
+     carEl.style.transition = "";
       carEl.style.left = px + 'px';
       setProgress(h.id, frac);
     });
