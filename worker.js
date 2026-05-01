@@ -409,155 +409,130 @@ function startRace() {
 }
 
 // ── RACE ENGINE ───────────────────────────────────────────────────────────────
+// Phase 1 (0–40%): All 4 cars race together in a tight pack
+// Phase 2 (40–80%): Losers peel off one by one slowest first, gently decelerating
+// Phase 3 (80–100%): Everyone glides smoothly to their true score position
 function runRace() {
   raceRan = true;
   const maxScore = Math.max(...Object.values(SCORES), 1);
   const { startPx, usable } = getTrackWidth();
 
-  // Final fracs — where each car should end up based on score
-  const finalFracs = {};
-  HOUSES.forEach(h => { finalFracs[h.id] = (SCORES[h.id] / maxScore) * 0.88; });
+  // Sort houses by score: index 0 = winner, index 3 = last
+  const ranked = [...HOUSES].sort((a, b) => SCORES[b.id] - SCORES[a.id]);
 
-  // Build a dense keyframe path for each car
-  // Each car:
-  //  - Has "struggle events" — it slows, wobbles back slightly, then surges forward
-  //  - Lower scored cars struggle MORE and get overtaken
-  //  - All cars end exactly at their final score position
-  //
-  // We use 40 frames over 5000ms = 125ms per frame
+  // Final positions (score-based, max 88% of track)
+  const finalFrac = {};
+  HOUSES.forEach(h => { finalFrac[h.id] = (SCORES[h.id] / maxScore) * 0.88; });
 
-  const KF = 40;
+  // The "peel-off" times — when each loser starts fading back
+  // Winner never peels. 2nd peels at 55%, 3rd at 45%, 4th at 35%
+  const peelAt = {}; // fraction of race time when car starts slowing
+  peelAt[ranked[0].id] = 1.0;  // winner — never peels
+  peelAt[ranked[1] ? ranked[1].id : null] = 0.60;
+  peelAt[ranked[2] ? ranked[2].id : null] = 0.45;
+  peelAt[ranked[3] ? ranked[3].id : null] = 0.32;
+
+  // Pack position during phase 1 — everyone races to about 55% of track together
+  // with tiny offsets so they look like a real pack not a wall
+  const packOffset = {};
+  HOUSES.forEach((h, i) => { packOffset[h.id] = i * 0.008; }); // tiny spread
+
+  const KF = 60; // frames
   const frameTime = RACE_DURATION / KF;
   const keyframes = {};
 
   HOUSES.forEach(h => {
-    const finalF = finalFracs[h.id];
     const frames = [];
-    // How much this car struggles (low score = struggle more)
-    const struggleFactor = 1 - (finalF / 0.88); // 0=winner, 1=last place
-
-    // Generate struggle events — random dips at random points in the race
-    // Number of struggles: 1 for winner, up to 4 for last place
-    const numStruggles = Math.round(1 + struggleFactor * 3);
-    const struggleTimes = [];
-    for (let s = 0; s < numStruggles; s++) {
-      // Place struggles in first 75% of race
-      const t = 0.15 + Math.random() * 0.6;
-      const depth  = 0.04 + Math.random() * 0.08 * struggleFactor; // how far back
-      const length = 0.06 + Math.random() * 0.08; // how long the struggle lasts
-      struggleTimes.push({ t, depth, length });
-    }
-
-    // Also add a big mid-race surge for lower scoring cars (brief overtake illusion)
-    const surgeTimes = [];
-    if (struggleFactor > 0.2) {
-      const st = 0.2 + Math.random() * 0.3;
-      const boost = 0.08 + Math.random() * 0.1 * struggleFactor;
-      surgeTimes.push({ t: st, boost, length: 0.12 });
-    }
-
-    let prevPos = 0;
+    const ff     = finalFrac[h.id];
+    const peel   = peelAt[h.id] || 0.32;
+    const po     = packOffset[h.id] || 0;
 
     for (let i = 0; i < KF; i++) {
-      const t = (i + 1) / KF;
+      const t = (i + 1) / KF; // 0..1
 
-      // Base smooth progress toward final position
-      // Use a curve that accelerates then holds
-      let base = finalF * easeInOut(t);
+      let pos;
 
-      // Apply surge boosts (car briefly goes ahead)
-      let surgeMod = 0;
-      surgeTimes.forEach(s => {
-        const dist = Math.abs(t - s.t);
-        if (dist < s.length) {
-          const phase = 1 - dist / s.length;
-          surgeMod += s.boost * Math.sin(phase * Math.PI);
-        }
-      });
+      if (t <= peel) {
+        // ── PACK PHASE: all cars race together
+        // smooth acceleration curve reaching ~55% of track by peel time
+        const packDist = 0.55 + po;
+        pos = packDist * easeInOut(t / peel);
 
-      // Apply struggle dips (car slows/stutters)
-      let struggleMod = 0;
-      struggleTimes.forEach(s => {
-        const dist = Math.abs(t - s.t);
-        if (dist < s.length) {
-          const phase = 1 - dist / s.length;
-          // During struggle: car slows (partial backward jerk at peak)
-          struggleMod -= s.depth * Math.pow(Math.sin(phase * Math.PI), 2);
-        }
-      });
+        // tiny natural jitter — cars shimmy slightly side to side in pack
+        pos += (Math.sin(t * 31 + h.id.charCodeAt(0)) * 0.006);
 
-      // Add tiny jitter to make it feel mechanical
-      const jitter = (Math.random() - 0.5) * 0.008;
+      } else if (t <= 0.88) {
+        // ── PEEL OFF PHASE: car smoothly decelerates toward final position
+        // t_local: how far through the peel-off phase we are (0..1)
+        const peelDuration = 0.88 - peel;
+        const t_local = (t - peel) / peelDuration;
 
-      let pos = base + surgeMod + struggleMod + jitter;
+        // Start pos = pack position at peel time
+        const packStart = 0.55 + po;
+        // Ease from packStart to finalFrac using deceleration curve
+        pos = packStart + (ff - packStart) * easeOut(t_local);
 
-      // In final 15% of race — all drama stops, converge cleanly to final
-      if (t > 0.85) {
-        const blend = (t - 0.85) / 0.15;
-        pos = pos * (1 - blend) + finalF * blend;
+        // Winner keeps going forward, not back — if final > packStart it surges
+        // If final < packStart it gracefully slows
+        pos = Math.max(po, pos); // never go behind start offset
+
+      } else {
+        // ── FINAL GLIDE: smooth snap to exact score position
+        const blend = (t - 0.88) / 0.12;
+        const prevPos = frames[frames.length - 1] || ff;
+        pos = prevPos + (ff - prevPos) * blend;
       }
 
-      // Never go backward more than 3% from previous frame (feels real not teleport)
-      pos = Math.max(prevPos - 0.03, pos);
       pos = Math.max(0, Math.min(0.95, pos));
-      prevPos = pos;
       frames.push(pos);
     }
 
-    // Force last frame to exact final position
-    frames[KF - 1] = finalF;
+    // Ensure last frame is exact
+    frames[KF - 1] = ff;
     keyframes[h.id] = frames;
   });
 
-  // Animate frame by frame
+  // ── ANIMATE ───────────────────────────────────────────────────────────────
   let frame = 0;
 
   const advanceFrame = () => {
     if (frame >= KF) {
-      setTimeout(() => showResults(finalFracs, startPx, usable), 200);
+      setTimeout(() => showResults(finalFrac, startPx, usable), 200);
       return;
     }
 
-    const isLastFew = frame >= KF - 4;
-
     HOUSES.forEach(h => {
       const frac  = keyframes[h.id][frame];
+      const prev  = frame > 0 ? keyframes[h.id][frame - 1] : 0;
+      const delta = frac - prev;
       const px    = startPx + frac * usable;
       const carEl = document.getElementById('car-' + h.id);
+      const t     = (frame + 1) / KF;
+      const peel  = peelAt[h.id] || 0.32;
 
-      // During struggles use a jerky easing; during surges use smooth; final = smooth
+      // Easing based on phase
       let ease, dur;
-      if (isLastFew) {
-        ease = 'ease-out'; dur = frameTime * 1.2;
+      if (t > 0.88) {
+        ease = 'ease-out'; dur = frameTime * 1.1;
+      } else if (t > peel) {
+        // Decelerating — use ease-out feel, longer duration = feels slower
+        ease = 'cubic-bezier(0.0,0.0,0.3,1.0)';
+        dur  = frameTime * (1.0 + (t - peel) * 0.8); // slows over time
       } else {
-        // Check if this frame is a struggle (position dropped)
-        const prev = frame > 0 ? keyframes[h.id][frame - 1] : 0;
-        const delta = frac - prev;
-        if (delta < -0.005) {
-          // Struggle — snap back quickly with a bounce
-          ease = 'cubic-bezier(0.8,0.0,1.0,1.0)'; dur = frameTime * 0.6;
-        } else if (delta > 0.03) {
-          // Surge — rocket forward
-          ease = 'cubic-bezier(0.0,0.0,0.2,1.0)'; dur = frameTime * 0.9;
-        } else {
-          // Normal — slightly uneven
-          ease = 'cubic-bezier(0.4,0.0,0.7,1.0)'; dur = frameTime * 0.85;
-        }
+        // Pack racing — smooth fast
+        ease = 'cubic-bezier(0.25,0.1,0.25,1.0)'; dur = frameTime * 0.92;
       }
 
       carEl.style.transition = 'left ' + dur + 'ms ' + ease;
       carEl.style.left = px + 'px';
       setProgress(h.id, frac);
 
-      // Tilt car slightly during struggle (rotate)
-      const prev2 = frame > 0 ? keyframes[h.id][frame - 1] : 0;
-      const d2 = frac - prev2;
-      if (d2 < -0.01) {
-        carEl.style.transform = 'translateY(-50%) rotate(3deg) scaleX(0.95)';
-      } else if (d2 > 0.025) {
-        carEl.style.transform = 'translateY(-50%) rotate(-2deg) scaleX(1.04)';
+      // Slight forward lean when accelerating in pack, neutral when slowing
+      if (t <= peel) {
+        carEl.style.transform = 'translateY(-50%) rotate(-1deg)';
       } else {
-        carEl.style.transform = 'translateY(-50%) rotate(0deg) scaleX(1)';
+        // Gradually straighten up as car slows
+        carEl.style.transform = 'translateY(-50%) rotate(0deg)';
       }
     });
 
@@ -568,12 +543,11 @@ function runRace() {
   advanceFrame();
 }
 
-// Smooth ease in-out curve
 function easeInOut(t) {
-  // Starts slow, fast in middle, slows to finish
-  return t < 0.5
-    ? 4 * t * t * t
-    : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2;
+}
+function easeOut(t) {
+  return 1 - Math.pow(1 - t, 3);
 }
 
 // ── FINAL RESULTS ─────────────────────────────────────────────────────────────
