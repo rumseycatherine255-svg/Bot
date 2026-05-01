@@ -414,62 +414,151 @@ function runRace() {
   const maxScore = Math.max(...Object.values(SCORES), 1);
   const { startPx, usable } = getTrackWidth();
 
-  // Each car has a "drama path" — fake intermediate positions, ending at true final
-  // We generate ~8 keyframes over RACE_DURATION where cars jostle for position
-  // then converge to their true score-based finish by the end
-
+  // Final fracs — where each car should end up based on score
   const finalFracs = {};
-  HOUSES.forEach(h => { finalFracs[h.id] = SCORES[h.id] / maxScore; });
+  HOUSES.forEach(h => { finalFracs[h.id] = (SCORES[h.id] / maxScore) * 0.88; });
 
-  // Build drama keyframes for each car
-  // Cars with lower scores can briefly overtake but then fall back
-  const KF_COUNT  = 9; // number of keyframes including final
-  const keyframes = {}; // id -> array of fracs
+  // Build a dense keyframe path for each car
+  // Each car:
+  //  - Has "struggle events" — it slows, wobbles back slightly, then surges forward
+  //  - Lower scored cars struggle MORE and get overtaken
+  //  - All cars end exactly at their final score position
+  //
+  // We use 40 frames over 5000ms = 125ms per frame
+
+  const KF = 40;
+  const frameTime = RACE_DURATION / KF;
+  const keyframes = {};
 
   HOUSES.forEach(h => {
     const finalF = finalFracs[h.id];
     const frames = [];
+    // How much this car struggles (low score = struggle more)
+    const struggleFactor = 1 - (finalF / 0.88); // 0=winner, 1=last place
 
-    // Generate dramatic intermediate path
-    // Cars start at 0, end at finalF
-    // In the middle they get some random drama — max overshoot depends on score
-    const maxBoost = 0.2; // how far above final a lagging car can briefly be
-
-    for (let i = 0; i < KF_COUNT - 1; i++) {
-      const t = (i + 1) / KF_COUNT; // 0..~0.88
-      // Base progress curve (ease in)
-      const base = Math.pow(t, 0.7) * finalF;
-      // Drama wobble — strongest in the middle
-      const drama = Math.sin(t * Math.PI) * maxBoost * (1 - finalF + 0.1);
-      // Add some noise
-      const noise = (Math.random() - 0.3) * 0.08 * Math.sin(t * Math.PI * 2);
-      frames.push(Math.max(0, Math.min(0.96, base + drama + noise)));
+    // Generate struggle events — random dips at random points in the race
+    // Number of struggles: 1 for winner, up to 4 for last place
+    const numStruggles = Math.round(1 + struggleFactor * 3);
+    const struggleTimes = [];
+    for (let s = 0; s < numStruggles; s++) {
+      // Place struggles in first 75% of race
+      const t = 0.15 + Math.random() * 0.6;
+      const depth  = 0.04 + Math.random() * 0.08 * struggleFactor; // how far back
+      const length = 0.06 + Math.random() * 0.08; // how long the struggle lasts
+      struggleTimes.push({ t, depth, length });
     }
-    // Final keyframe = true score position
-    frames.push(Math.min(finalF * 0.9, 0.92)); // 90% of track max
+
+    // Also add a big mid-race surge for lower scoring cars (brief overtake illusion)
+    const surgeTimes = [];
+    if (struggleFactor > 0.2) {
+      const st = 0.2 + Math.random() * 0.3;
+      const boost = 0.08 + Math.random() * 0.1 * struggleFactor;
+      surgeTimes.push({ t: st, boost, length: 0.12 });
+    }
+
+    let prevPos = 0;
+
+    for (let i = 0; i < KF; i++) {
+      const t = (i + 1) / KF;
+
+      // Base smooth progress toward final position
+      // Use a curve that accelerates then holds
+      let base = finalF * easeInOut(t);
+
+      // Apply surge boosts (car briefly goes ahead)
+      let surgeMod = 0;
+      surgeTimes.forEach(s => {
+        const dist = Math.abs(t - s.t);
+        if (dist < s.length) {
+          const phase = 1 - dist / s.length;
+          surgeMod += s.boost * Math.sin(phase * Math.PI);
+        }
+      });
+
+      // Apply struggle dips (car slows/stutters)
+      let struggleMod = 0;
+      struggleTimes.forEach(s => {
+        const dist = Math.abs(t - s.t);
+        if (dist < s.length) {
+          const phase = 1 - dist / s.length;
+          // During struggle: car slows (partial backward jerk at peak)
+          struggleMod -= s.depth * Math.pow(Math.sin(phase * Math.PI), 2);
+        }
+      });
+
+      // Add tiny jitter to make it feel mechanical
+      const jitter = (Math.random() - 0.5) * 0.008;
+
+      let pos = base + surgeMod + struggleMod + jitter;
+
+      // In final 15% of race — all drama stops, converge cleanly to final
+      if (t > 0.85) {
+        const blend = (t - 0.85) / 0.15;
+        pos = pos * (1 - blend) + finalF * blend;
+      }
+
+      // Never go backward more than 3% from previous frame (feels real not teleport)
+      pos = Math.max(prevPos - 0.03, pos);
+      pos = Math.max(0, Math.min(0.95, pos));
+      prevPos = pos;
+      frames.push(pos);
+    }
+
+    // Force last frame to exact final position
+    frames[KF - 1] = finalF;
     keyframes[h.id] = frames;
   });
 
-  // Animate
+  // Animate frame by frame
   let frame = 0;
-  const totalFrames = KF_COUNT;
-  const frameTime   = RACE_DURATION / totalFrames;
 
   const advanceFrame = () => {
-    if (frame >= totalFrames) {
-      // Show final positions
-      setTimeout(() => showResults(finalFracs, startPx, usable), 300);
+    if (frame >= KF) {
+      setTimeout(() => showResults(finalFracs, startPx, usable), 200);
       return;
     }
 
+    const isLastFew = frame >= KF - 4;
+
     HOUSES.forEach(h => {
-      const frac = keyframes[h.id][frame];
-      const px   = startPx + (frac * usable);
-      // Animate smoothly to this keyframe
+      const frac  = keyframes[h.id][frame];
+      const px    = startPx + frac * usable;
       const carEl = document.getElementById('car-' + h.id);
-     carEl.style.transition = "left " + (frameTime * 0.85) + "ms cubic-bezier(0.25, 0.8, 0.25, 1)";
+
+      // During struggles use a jerky easing; during surges use smooth; final = smooth
+      let ease, dur;
+      if (isLastFew) {
+        ease = 'ease-out'; dur = frameTime * 1.2;
+      } else {
+        // Check if this frame is a struggle (position dropped)
+        const prev = frame > 0 ? keyframes[h.id][frame - 1] : 0;
+        const delta = frac - prev;
+        if (delta < -0.005) {
+          // Struggle — snap back quickly with a bounce
+          ease = 'cubic-bezier(0.8,0.0,1.0,1.0)'; dur = frameTime * 0.6;
+        } else if (delta > 0.03) {
+          // Surge — rocket forward
+          ease = 'cubic-bezier(0.0,0.0,0.2,1.0)'; dur = frameTime * 0.9;
+        } else {
+          // Normal — slightly uneven
+          ease = 'cubic-bezier(0.4,0.0,0.7,1.0)'; dur = frameTime * 0.85;
+        }
+      }
+
+      carEl.style.transition = 'left ' + dur + 'ms ' + ease;
       carEl.style.left = px + 'px';
       setProgress(h.id, frac);
+
+      // Tilt car slightly during struggle (rotate)
+      const prev2 = frame > 0 ? keyframes[h.id][frame - 1] : 0;
+      const d2 = frac - prev2;
+      if (d2 < -0.01) {
+        carEl.style.transform = 'translateY(-50%) rotate(3deg) scaleX(0.95)';
+      } else if (d2 > 0.025) {
+        carEl.style.transform = 'translateY(-50%) rotate(-2deg) scaleX(1.04)';
+      } else {
+        carEl.style.transform = 'translateY(-50%) rotate(0deg) scaleX(1)';
+      }
     });
 
     frame++;
@@ -477,6 +566,14 @@ function runRace() {
   };
 
   advanceFrame();
+}
+
+// Smooth ease in-out curve
+function easeInOut(t) {
+  // Starts slow, fast in middle, slows to finish
+  return t < 0.5
+    ? 4 * t * t * t
+    : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
 // ── FINAL RESULTS ─────────────────────────────────────────────────────────────
